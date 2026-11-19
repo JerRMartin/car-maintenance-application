@@ -69,7 +69,7 @@ interface WeekResponse {
   }
   baseline_total: number
   previews: Record<string, Partial<Record<Assignment, Preview>>>
-  jobs: Record<string, { vehicle_id: string; in_house: boolean }>
+  jobs: Record<string, { vehicle_id: string; in_house: boolean; vendor_price: number; vendor_days: number }>
   decisions: Decision[]
   config: {
     shop: { tech_hours_per_day: number; labor_rate_per_hour: number; open_days: string[] }
@@ -192,17 +192,17 @@ export default function App() {
         <h2>
           Shop queue <span className="muted">· worked top to bottom</span>
         </h2>
-        <ShopQueue rows={week.shop_queue} previews={previews} busy={busy} decide={decide} jobs={data.jobs} />
+        <ShopQueue rows={week.shop_queue} previews={previews} costs={week.costs} busy={busy} decide={decide} jobs={data.jobs} />
       </section>
 
       <div className="two-col">
         <section>
           <h2>Sent to vendor</h2>
-          <VendorList rows={week.vendor} previews={previews} busy={busy} decide={decide} />
+          <VendorList rows={week.vendor} previews={previews} costs={week.costs} busy={busy} decide={decide} />
         </section>
         <section>
           <h2>On hold</h2>
-          <HeldList rows={week.held} previews={previews} busy={busy} decide={decide} />
+          <HeldList rows={week.held} previews={previews} costs={week.costs} busy={busy} decide={decide} jobs={data.jobs} />
         </section>
       </div>
 
@@ -305,24 +305,37 @@ function ShortageGrid({ cells, days }: { cells: ShortageCell[]; days: string[] }
 
 type Decide = (action: string, work_order_id?: string, to_position?: number) => void
 
-function Effect({ p }: { p?: Preview }) {
-  if (!p) return null
-  return (
-    <span className={p.total_change < 0 ? 'effect good' : p.total_change > 0 ? 'effect bad' : 'effect'}>
-      {signed(p.total_change)} · {p.budget_left < 0 ? 'over by ' + money(p.budget_left) : money(p.budget_left) + ' left'}
-    </span>
-  )
+const PREVIEW_KEY: Record<string, Assignment> = { send_to_vendor: 'vendor', bring_to_shop: 'shop', hold: 'hold' }
+const ACTION_TEXT: Record<string, string> = {
+  send_to_vendor: 'Send %s to the vendor',
+  bring_to_shop: 'Repair %s in house',
+  hold: 'Hold %s (not worked this week)',
+}
+const budgetText = (n: number) => (n < 0 ? `over budget by ${money(n)}` : money(n))
+
+// Tooltip: what this choice would do to the week, in plain words.
+function impactText(action: string, wo: string, previews: WeekResponse['previews'], costs: Costs): string {
+  const title = ACTION_TEXT[action].replace('%s', wo)
+  const p = previews[wo]?.[PREVIEW_KEY[action]]
+  if (!p) return title
+  return [
+    title,
+    `Week cost: ${money(costs.total)} → ${money(costs.total + p.total_change)} (${signed(p.total_change)})`,
+    `Vendor budget left: ${budgetText(costs.budget_left)} → ${budgetText(p.budget_left)}`,
+  ].join('\n')
 }
 
 function ShopQueue({
   rows,
   previews,
+  costs,
   busy,
   decide,
   jobs,
 }: {
   rows: ShopRow[]
   previews: WeekResponse['previews']
+  costs: Costs
   busy: boolean
   decide: Decide
   jobs: WeekResponse['jobs']
@@ -396,16 +409,15 @@ function ShopQueue({
                   </div>
                 </td>
                 <td>
-                  <button disabled={busy} onClick={() => decide('send_to_vendor', r.work_order_id)}>
+                  <button disabled={busy} title={impactText('send_to_vendor', r.work_order_id, previews, costs)} onClick={() => decide('send_to_vendor', r.work_order_id)}>
                     Send to vendor
                   </button>
-                  <Effect p={previews[r.work_order_id]?.vendor} />
+                  <span className="price">{money(jobs[r.work_order_id]?.vendor_price ?? 0)}</span>
                 </td>
                 <td>
-                  <button disabled={busy} onClick={() => decide('hold', r.work_order_id)}>
+                  <button disabled={busy} title={impactText('hold', r.work_order_id, previews, costs)} onClick={() => decide('hold', r.work_order_id)}>
                     Hold
                   </button>
-                  <Effect p={previews[r.work_order_id]?.hold} />
                 </td>
               </tr>
             )
@@ -419,11 +431,13 @@ function ShopQueue({
 function VendorList({
   rows,
   previews,
+  costs,
   busy,
   decide,
 }: {
   rows: VendorRow[]
   previews: WeekResponse['previews']
+  costs: Costs
   busy: boolean
   decide: Decide
 }) {
@@ -456,17 +470,15 @@ function VendorList({
                 <div className="stack">
                 {r.in_house && (
                   <span>
-                    <button disabled={busy} onClick={() => decide('bring_to_shop', r.work_order_id)}>
+                    <button disabled={busy} title={impactText('bring_to_shop', r.work_order_id, previews, costs)} onClick={() => decide('bring_to_shop', r.work_order_id)}>
                       Repair in house
                     </button>
-                    <Effect p={previews[r.work_order_id]?.shop} />
                   </span>
                 )}
                 <span>
-                  <button disabled={busy} onClick={() => decide('hold', r.work_order_id)}>
+                  <button disabled={busy} title={impactText('hold', r.work_order_id, previews, costs)} onClick={() => decide('hold', r.work_order_id)}>
                     Hold
                   </button>
-                  <Effect p={previews[r.work_order_id]?.hold} />
                 </span>
               </div>
               </td>
@@ -481,13 +493,17 @@ function VendorList({
 function HeldList({
   rows,
   previews,
+  costs,
   busy,
   decide,
+  jobs,
 }: {
   rows: HoldRow[]
   previews: WeekResponse['previews']
+  costs: Costs
   busy: boolean
   decide: Decide
+  jobs: WeekResponse['jobs']
 }) {
   if (!rows.length) return <p className="muted">Nothing on hold.</p>
   return (
@@ -514,17 +530,16 @@ function HeldList({
                 <div className="stack">
                 {r.in_house && (
                   <span>
-                    <button disabled={busy} onClick={() => decide('bring_to_shop', r.work_order_id)}>
+                    <button disabled={busy} title={impactText('bring_to_shop', r.work_order_id, previews, costs)} onClick={() => decide('bring_to_shop', r.work_order_id)}>
                       Repair in house
                     </button>
-                    <Effect p={previews[r.work_order_id]?.shop} />
                   </span>
                 )}
                 <span>
-                  <button disabled={busy} onClick={() => decide('send_to_vendor', r.work_order_id)}>
+                  <button disabled={busy} title={impactText('send_to_vendor', r.work_order_id, previews, costs)} onClick={() => decide('send_to_vendor', r.work_order_id)}>
                     Send to vendor
                   </button>
-                  <Effect p={previews[r.work_order_id]?.vendor} />
+                  <span className="price">{money(jobs[r.work_order_id]?.vendor_price ?? 0)}</span>
                 </span>
               </div>
               </td>
