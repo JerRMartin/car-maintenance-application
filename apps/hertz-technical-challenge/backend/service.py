@@ -96,7 +96,7 @@ def _sync_with_open_jobs(plan: list[PlanItem], inputs: Inputs) -> tuple[list[Pla
     new_jobs = sorted((j for j in inputs.jobs.values() if j.work_order_id not in planned),
                       key=lambda j: (j.opened_ts, j.work_order_id))
     for j in new_jobs:
-        kept.append(PlanItem(j.work_order_id, SHOP if j.in_house else VENDOR))
+        kept.append(PlanItem(j.work_order_id, SHOP if j.in_house else HOLD))   # vendor-only: not sent until chosen
         events.append(store.Decision("job_added", "system", j.work_order_id))
     return kept, events
 
@@ -123,7 +123,7 @@ def _current_plan(inputs: Inputs, cfg) -> list[PlanItem]:
     week = cfg.planning_week.start
     saved = db.load_plan(week)
     if not saved:
-        plan = planner.oldest_first_plan(inputs)
+        plan = planner.oldest_first_plan(inputs, send_vendor_only=False)    # vendor-only jobs start unsent
         cost = planner.simulate(plan, inputs, cfg).costs.total
         db.save(week, _to_rows(plan), [store.Decision("start_plan", "system",
                                                       week_cost_after=cost)])
@@ -150,7 +150,7 @@ def _apply(plan: list[PlanItem], inputs: Inputs, action: str,
            goal: str | None = None) -> tuple[list[PlanItem], dict]:
     cfg = cfg or load_config()
     if action == "reset_to_oldest_first":
-        return planner.oldest_first_plan(inputs), {}
+        return planner.oldest_first_plan(inputs, send_vendor_only=False), {}
     if action == "use_suggested":
         goal = goal or "savings"
         if goal not in GOALS:
@@ -256,7 +256,8 @@ def get_week() -> dict:
     storage, db = _storage()
     plan = _current_plan(inputs, cfg)
     week = planner.simulate(plan, inputs, cfg)
-    baseline = planner.simulate(planner.oldest_first_plan(inputs), inputs, cfg).costs.total
+    # "vs oldest first": same send / don't-send choices for vendor-only jobs, oldest-first order
+    baseline = planner.simulate(planner.oldest_first_plan(inputs, not_sent=_deferred(plan)), inputs, cfg).costs.total
     return {
         "week": week.to_dict(),
         "baseline_total": round(baseline, 2),

@@ -112,6 +112,13 @@ class PlanRules(unittest.TestCase):
         self.assertEqual(self._optimized("readiness", defer=True), (20852, 6))    # 2a
         self.assertEqual(self._optimized("readiness", defer=False), (27818, 9))   # 2b
 
+    def test_oldest_first_can_leave_vendor_only_unsent(self):
+        plan = oldest_first_plan(self.inputs, send_vendor_only=False)
+        week = simulate(plan, self.inputs, self.cfg)
+        self.assertEqual(week.costs.vendor, 0)
+        self.assertEqual(sorted(h.work_order_id for h in week.held), ["WO-055", "WO-056", "WO-057"])
+        self.assertEqual(round(week.costs.total), 29821 - 8780)
+
     def test_vendor_only_job_cannot_go_to_shop(self):
         plan = oldest_first_plan(self.inputs)
         plan = [PlanItem(p.work_order_id, SHOP) if p.work_order_id == "WO-055" else p for p in plan]

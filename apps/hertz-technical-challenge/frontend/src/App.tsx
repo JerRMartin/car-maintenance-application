@@ -105,6 +105,7 @@ const addDays = (iso: string, n: number) => {
   d.setDate(d.getDate() + n)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+const daysText = (n: number) => `${n} day${n === 1 ? '' : 's'}`
 const GOAL_LABEL: Record<Goal, string> = { savings: 'Savings', readiness: 'Car readiness' }
 const GOAL_HELP: Record<Goal, string> = {
   savings: 'Lowest cost of the week',
@@ -118,7 +119,7 @@ const ACTION_LABEL: Record<string, string> = {
   move: 'Moved in queue',
   send_to_vendor: 'Sent to vendor',
   bring_to_shop: 'Brought back to shop',
-  hold: 'Moved to next week',
+  hold: 'Not sent this week',
   use_suggested: 'Optimized plan',
   reset_to_oldest_first: 'Reset to oldest first',
   start_plan: 'Week started (oldest first)',
@@ -276,11 +277,11 @@ export default function App() {
               <CostCards costs={week.costs} baseline={data.baseline_total} />
             </section>
             <section>
-              <VendorList rows={week.vendor} previews={previews} costs={week.costs} busy={busy} decide={decide} onDefer={setDeferRow} />
+              <VendorList rows={week.vendor} previews={previews} costs={week.costs} busy={busy} decide={decide} onDefer={setDeferRow} jobs={data.jobs} />
             </section>
             {week.held.length > 0 && (
               <section>
-                <SectionTitle title="Next week" subtitle="Vendor-only jobs moved to next week: not paid or returned this week." />
+                <SectionTitle title="Not sent this week" subtitle="Vendor-only jobs that haven't been sent: not paid or returned this week." />
                 <NextWeekList
                   rows={week.held}
                   jobs={data.jobs}
@@ -303,8 +304,8 @@ export default function App() {
       </main>
       {deferRow && (
         <ConfirmDialog
-          title={`Send ${deferRow.work_order_id} next week?`}
-          confirmLabel="Send next week"
+          title={`Don't send ${deferRow.work_order_id} this week?`}
+          confirmLabel="Don't send"
           onCancel={() => setDeferRow(null)}
           onConfirm={() => {
             const wo = deferRow.work_order_id
@@ -314,7 +315,7 @@ export default function App() {
         >
           <p className="warn-line">
             ⚠ {jobName(deferRow.job_type)} takes <strong>{data.jobs[deferRow.work_order_id]?.vendor_days} days</strong> at the
-            vendor. Sending it next week delays this car by a week.
+            vendor. Not sending it this week delays this car by a week.
           </p>
           <table className="mini">
             <tbody>
@@ -712,7 +713,7 @@ const PREVIEW_KEY: Record<string, Assignment> = { send_to_vendor: 'vendor', brin
 const ACTION_TEXT: Record<string, string> = {
   send_to_vendor: 'Send %s to the vendor',
   bring_to_shop: 'Repair %s in house',
-  hold: 'Send %s to the vendor next week',
+  hold: "Don't send %s to the vendor this week",
 }
 const budgetText = (n: number) => (n < 0 ? `over budget by ${money(n)}` : money(n))
 
@@ -1205,7 +1206,9 @@ function ShopQueue({
                     >
                       Send to vendor
                     </button>
-                    <span className="price">{money(jobs[r.work_order_id]?.vendor_price ?? 0)}</span>
+                    <span className="price">
+                      {money(jobs[r.work_order_id]?.vendor_price ?? 0)} · {daysText(jobs[r.work_order_id]?.vendor_days ?? 0)}
+                    </span>
                   </td>
                 </tr>
               )
@@ -1224,6 +1227,7 @@ function VendorList({
   busy,
   decide,
   onDefer,
+  jobs,
 }: {
   rows: VendorRow[]
   previews: WeekResponse['previews']
@@ -1231,6 +1235,7 @@ function VendorList({
   busy: boolean
   decide: Decide
   onDefer: (row: VendorRow) => void
+  jobs: WeekResponse['jobs']
 }) {
   if (!rows.length) return <p className="muted">No jobs sent to the vendor.</p>
   return (
@@ -1242,6 +1247,7 @@ function VendorList({
             <th>Class</th>
             <th>Job</th>
             <th className="num">Price</th>
+            <th className="num">Turnaround</th>
             <th>Ready to rent</th>
             <th>Change</th>
           </tr>
@@ -1256,6 +1262,7 @@ function VendorList({
                 {!r.in_house && <span className="tag">vendor-only</span>}
               </td>
               <td className="num">{money(r.vendor_price)}</td>
+              <td className="num">{daysText(jobs[r.work_order_id]?.vendor_days ?? 0)}</td>
               <td>{day(r.ready_date)}</td>
               <td>
                 {r.in_house ? (
@@ -1264,7 +1271,7 @@ function VendorList({
                   </button>
                 ) : (
                   <button disabled={busy} title={impactText('hold', r.work_order_id, previews, costs)} onClick={() => onDefer(r)}>
-                    Send next week
+                    Don't send
                   </button>
                 )}
               </td>
@@ -1302,7 +1309,7 @@ function NextWeekList({
             <th>Class</th>
             <th>Job</th>
             <th className="num">Price</th>
-            <th className="num">Vendor days</th>
+            <th className="num">Turnaround</th>
             <th>Back if sent this week</th>
             <th>Back if sent next week</th>
             <th>Change</th>
@@ -1317,7 +1324,7 @@ function NextWeekList({
                 <td>{className(r.vehicle_class)}</td>
                 <td>{jobName(r.job_type)}</td>
                 <td className="num">{money(j?.vendor_price ?? 0)}</td>
-                <td className="num">{j?.vendor_days}</td>
+                <td className="num">{daysText(j?.vendor_days ?? 0)}</td>
                 <td>{day(addDays(sendDay, j?.vendor_days ?? 0))}</td>
                 <td>
                   <strong>{day(addDays(sendDay, 7 + (j?.vendor_days ?? 0)))}</strong>
@@ -1447,7 +1454,7 @@ function DecisionLog({ decisions }: { decisions: Decision[] }) {
                 <td className="mono">{d.work_order_id ?? ''}</td>
                 <td className="muted">
                   {d.detail && 'from' in d.detail
-                    ? `${String(d.detail.from).replace('hold', 'next week')} → ${String(d.detail.to).replace('hold', 'next week')}`
+                    ? `${String(d.detail.from).replace('hold', 'not sent')} → ${String(d.detail.to).replace('hold', 'not sent')}`
                     : d.detail && 'goal' in d.detail
                       ? GOAL_LABEL[d.detail.goal as Goal] ?? String(d.detail.goal)
                       : ''}

@@ -252,10 +252,16 @@ def simulate(plan: list[PlanItem], inputs: Inputs, cfg: PlanningConfig, split_jo
 
 
 # ----------------------------------------------------------------- plans ----
-def oldest_first_plan(inputs: Inputs) -> list[PlanItem]:
-    """Today's practice: shop works oldest first; vendor-only jobs go to the vendor."""
+def oldest_first_plan(inputs: Inputs, send_vendor_only: bool = True, not_sent=()) -> list[PlanItem]:
+    """Shop works oldest first. Vendor-only jobs go to the vendor, unless send_vendor_only=False
+    (none sent) or they're listed in not_sent."""
+    not_sent = set(not_sent)
     jobs = sorted(inputs.jobs.values(), key=lambda j: (j.opened_ts, j.work_order_id))
-    return [PlanItem(j.work_order_id, SHOP if j.in_house else VENDOR) for j in jobs]
+    def assign(j):
+        if j.in_house:
+            return SHOP
+        return VENDOR if send_vendor_only and j.work_order_id not in not_sent else HOLD
+    return [PlanItem(j.work_order_id, assign(j)) for j in jobs]
 
 
 def short_classes(inputs: Inputs, cfg: PlanningConfig) -> set[str]:
