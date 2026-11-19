@@ -623,10 +623,6 @@ function ShortageGrid({ cells, days }: { cells: ShortageCell[]; days: string[] }
         </tbody>
       </table>
     </div>
-    <p className="muted grid-note">
-      Short = reservations − cars ready − cars back from maintenance, counted separately each day. Monday is fully booked
-      but not short, and repairs finished Monday are ready Tuesday, so planning only changes Tuesday onward.
-    </p>
     </>
   )
 }
