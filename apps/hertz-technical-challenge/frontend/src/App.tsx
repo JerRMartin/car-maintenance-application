@@ -156,6 +156,7 @@ export default function App() {
   const page = usePage()
   const [confirmReset, setConfirmReset] = useState(false)
   const [deferRow, setDeferRow] = useState<VendorRow | null>(null)
+  const [lastChange, setLastChange] = useState<LastChange | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -181,7 +182,20 @@ export default function App() {
         body: JSON.stringify({ action, work_order_id, to_position, goal }),
       })
       if (!r.ok) throw new Error((await r.json()).detail ?? r.statusText)
-      setData(await r.json())
+      const next: WeekResponse = await r.json()
+      if (data) {
+        const a = data.week.costs
+        const b = next.week.costs
+        const what = action === 'use_suggested' ? `Optimized for ${GOAL_LABEL[goal ?? 'savings']}` : ACTION_LABEL[action] ?? action
+        setLastChange({
+          total: b.total - a.total,
+          shop: b.shop - a.shop,
+          vendor: b.vendor - a.vendor,
+          lost_revenue: b.lost_revenue - a.lost_revenue,
+          label: work_order_id ? `${what} (${work_order_id})` : what,
+        })
+      }
+      setData(next)
       setError(null)
     } catch (e) {
       setError(String(e))
@@ -252,7 +266,7 @@ export default function App() {
           <>
             <section>
               <SectionTitle title="Cost of the week" subtitle="Shop + vendor + lost revenue for the plan week." />
-              <CostCards costs={week.costs} baseline={data.baseline_total} />
+              <CostCards costs={week.costs} baseline={data.baseline_total} change={lastChange} />
               <p className="muted assumptions">
                 Shop: {data.config.shop.tech_hours_per_day} tech hrs/day, {data.config.shop.open_days.join('–')} · $
                 {data.config.shop.labor_rate_per_hour}/hr · Vendor budget {money(data.config.vendor.weekly_budget)}/week
@@ -280,7 +294,7 @@ export default function App() {
         {page === 'queue' && (
           <>
             <section>
-              <CostCards costs={week.costs} baseline={data.baseline_total} />
+              <CostCards costs={week.costs} baseline={data.baseline_total} change={lastChange} />
             </section>
             <section>
               <QueuePage
@@ -301,7 +315,7 @@ export default function App() {
         {page === 'vendor' && (
           <>
             <section>
-              <CostCards costs={week.costs} baseline={data.baseline_total} />
+              <CostCards costs={week.costs} baseline={data.baseline_total} change={lastChange} />
             </section>
             <VendorBoard
               vendor={week.vendor}
@@ -625,37 +639,67 @@ function SectionTitle({ title, subtitle, badge }: { title: string; subtitle: str
 }
 
 // --------------------------------------------------------------- parts ----
-function CostCards({ costs, baseline }: { costs: Costs; baseline: number }) {
+interface LastChange {
+  total: number
+  shop: number
+  vendor: number
+  lost_revenue: number
+  label: string
+}
+
+// Change caused by the last decision. Costs going up are red, down are green.
+function ChangeBadge({ value, label }: { value?: number; label?: string }) {
+  if (value === undefined || Math.round(value) === 0) return null
+  return (
+    <span className={value > 0 ? 'delta up' : 'delta down'} title={`Change from the last decision: ${label}`}>
+      {signed(value)}
+    </span>
+  )
+}
+
+function CostCards({ costs, baseline, change }: { costs: Costs; baseline: number; change?: LastChange | null }) {
   const saved = baseline - costs.total
   const overBudget = costs.budget_left < 0
   const used = Math.min(100, (costs.vendor / costs.vendor_budget) * 100)
   // Budget bar color: green < 60% used, yellow < 85%, orange up to 100%, red when over
   const budgetLevel = overBudget ? 'over' : used < 60 ? 'low' : used < 85 ? 'mid' : 'high'
+  const c = change ?? undefined
   return (
     <div className="cards">
       <div className="card total">
         <span className="label">Cost of the week</span>
         <span className="value">
           {money(costs.total)}
-          {Math.round(saved) !== 0 && (
-            <span className={saved > 0 ? 'delta down' : 'delta up'}>
-              {saved > 0 ? '↓' : '↑'}
-              {money(saved)}
-            </span>
-          )}
+          <ChangeBadge value={c?.total} label={c?.label} />
         </span>
         <span className="note">
-          {Math.round(saved) === 0 ? 'Same as oldest first' : `vs ${money(baseline)} working oldest first`}
+          {Math.round(saved) === 0 ? (
+            'Same as oldest first'
+          ) : (
+            <>
+              <span className={saved > 0 ? 'vs-good' : 'vs-bad'}>
+                {saved > 0 ? '↓' : '↑'}
+                {money(saved)}
+              </span>{' '}
+              vs {money(baseline)} working oldest first
+            </>
+          )}
         </span>
       </div>
       <div className="card">
         <span className="label">Shop</span>
-        <span className="value">{money(costs.shop)}</span>
+        <span className="value">
+          {money(costs.shop)}
+          <ChangeBadge value={c?.shop} label={c?.label} />
+        </span>
         <span className="note">labor + parts</span>
       </div>
       <div className={overBudget ? 'card over' : 'card'}>
         <span className="label">Vendor</span>
-        <span className="value">{money(costs.vendor)}</span>
+        <span className="value">
+          {money(costs.vendor)}
+          <ChangeBadge value={c?.vendor} label={c?.label} />
+        </span>
         <div className={`bar budget-${budgetLevel}`} aria-hidden>
           <div style={{ width: `${used}%` }} />
         </div>
@@ -667,7 +711,10 @@ function CostCards({ costs, baseline }: { costs: Costs; baseline: number }) {
       </div>
       <div className="card">
         <span className="label">Lost revenue</span>
-        <span className="value">{money(costs.lost_revenue)}</span>
+        <span className="value">
+          {money(costs.lost_revenue)}
+          <ChangeBadge value={c?.lost_revenue} label={c?.label} />
+        </span>
         <span className="note">short cars × daily rate</span>
       </div>
     </div>

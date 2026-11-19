@@ -1097,3 +1097,16 @@ td .sub {
 .tip-box li + li {
   margin-top: 4px;
 }
+
+/* "vs oldest first" comparison, now in the note under the total */
+.card.total .vs-good {
+  color: #7fe0a6;
+  font-weight: 700;
+}
+.card.total .vs-bad {
+  color: #ff9a92;
+  font-weight: 700;
+}
+.card.over .delta {
+  background: rgba(255, 255, 255, 0.9);
+}
