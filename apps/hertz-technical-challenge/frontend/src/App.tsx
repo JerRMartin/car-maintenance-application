@@ -172,7 +172,7 @@ export default function App() {
   if (!data) {
     return (
       <main className="page">
-        <p className="eyebrow">Fleet maintenance</p>
+        <p className="eyebrow">Fleet Maintenance</p>
         <h1>Maintenance planner</h1>
         {error ? <p className="error">Couldn't load the week: {error}</p> : <p className="muted">Loading the week…</p>}
       </main>
@@ -197,8 +197,14 @@ export default function App() {
       <main className="page">
         <header className="top">
           <div>
-            <p className="eyebrow">Fleet maintenance · {weekLabel}</p>
-            <h1>{meta.label}</h1>
+            <p className="eyebrow">Fleet Maintenance</p>
+            <div className="title-row">
+              <h1>{meta.label}</h1>
+              <span className="week-pill" title="Plan week">
+                <span className="week-pill-label">Week</span>
+                {weekLabel}
+              </span>
+            </div>
             <p className="muted">{meta.subtitle}</p>
           </div>
           <div className="top-actions">
@@ -224,7 +230,7 @@ export default function App() {
         {page === 'summary' && (
           <>
             <section>
-              <SectionTitle title="Cost of the week" subtitle="Shop + vendor + lost revenue for the plan week." badge={weekLabel} />
+              <SectionTitle title="Cost of the week" subtitle="Shop + vendor + lost revenue for the plan week." />
               <CostCards costs={week.costs} baseline={data.baseline_total} />
               <p className="muted assumptions">
                 Shop: {data.config.shop.tech_hours_per_day} tech hrs/day, {data.config.shop.open_days.join('–')} · $

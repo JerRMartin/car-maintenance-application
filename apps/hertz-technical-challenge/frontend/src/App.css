@@ -904,3 +904,37 @@ td .sub {
 .drop-zone tr[draggable='true'] {
   cursor: grab;
 }
+
+/* plan-week pill next to the page title */
+.title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 2px 0 6px;
+}
+.title-row h1 {
+  margin: 0;
+}
+.week-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--ink);
+  color: var(--yellow);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 6px 14px 6px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.week-pill-label {
+  background: var(--yellow);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
