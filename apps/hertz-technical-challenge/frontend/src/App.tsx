@@ -202,7 +202,15 @@ export default function App() {
             title="Shop queue"
             subtitle="Worked top to bottom. Reorder jobs, or send one to the vendor."
           />
-          <ShopQueue rows={week.shop_queue} previews={previews} costs={week.costs} busy={busy} decide={decide} jobs={data.jobs} />
+          <ShopQueue
+            rows={week.shop_queue}
+            previews={previews}
+            costs={week.costs}
+            busy={busy}
+            decide={decide}
+            jobs={data.jobs}
+            shortClasses={new Set(week.shortages.filter((c) => c.short > 0).map((c) => c.vehicle_class))}
+          />
         </section>
 
         <section id="vendor">
@@ -400,6 +408,18 @@ function impactText(action: string, wo: string, previews: WeekResponse['previews
   ].join('\n')
 }
 
+type SortKey = 'position' | 'vehicle_class' | 'job_type' | 'shop_hours' | 'ready_date' | 'shop_cost'
+type ReadyFilter = 'all' | 'ready' | 'not_ready'
+
+const SORT_VALUE: Record<SortKey, (r: ShopRow) => string | number> = {
+  position: (r) => r.position,
+  vehicle_class: (r) => r.vehicle_class,
+  job_type: (r) => r.job_type,
+  shop_hours: (r) => r.shop_hours,
+  ready_date: (r) => r.ready_date ?? '9999-12-31', // not this week sorts last
+  shop_cost: (r) => r.shop_cost,
+}
+
 function ShopQueue({
   rows,
   previews,
@@ -407,6 +427,7 @@ function ShopQueue({
   busy,
   decide,
   jobs,
+  shortClasses,
 }: {
   rows: ShopRow[]
   previews: WeekResponse['previews']
@@ -414,10 +435,63 @@ function ShopQueue({
   busy: boolean
   decide: Decide
   jobs: WeekResponse['jobs']
+  shortClasses: Set<string>
 }) {
   const [moveTo, setMoveTo] = useState<Record<string, string>>({})
 
-  // Drag and drop: drop above or below the hovered row, depending on which half the pointer is in.
+  // --- Filters and sort: they change what's shown, never the plan itself ----
+  const [search, setSearch] = useState('')
+  const [cls, setCls] = useState('all')
+  const [job, setJob] = useState('all')
+  const [ready, setReady] = useState<ReadyFilter>('all')
+  const [onlyShort, setOnlyShort] = useState(false)
+  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'position', desc: false })
+
+  const classes = useMemo(() => [...new Set(rows.map((r) => r.vehicle_class))].sort(), [rows])
+  const jobTypes = useMemo(() => [...new Set(rows.map((r) => r.job_type))].sort(), [rows])
+
+  const shown = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const out = rows.filter(
+      (r) =>
+        (!q || r.work_order_id.toLowerCase().includes(q) || (jobs[r.work_order_id]?.vehicle_id ?? '').toLowerCase().includes(q)) &&
+        (cls === 'all' || r.vehicle_class === cls) &&
+        (job === 'all' || r.job_type === job) &&
+        (ready === 'all' || (ready === 'ready' ? !!r.ready_date : !r.ready_date)) &&
+        (!onlyShort || shortClasses.has(r.vehicle_class)),
+    )
+    const value = SORT_VALUE[sort.key]
+    return out.sort((a, b) => {
+      const va = value(a)
+      const vb = value(b)
+      const c = va < vb ? -1 : va > vb ? 1 : a.position - b.position
+      return sort.desc ? -c : c
+    })
+  }, [rows, jobs, search, cls, job, ready, onlyShort, shortClasses, sort])
+
+  const filtered = shown.length !== rows.length
+  const queueOrder = sort.key === 'position' && !sort.desc
+  const canReorder = !busy && queueOrder
+  const clear = () => {
+    setSearch('')
+    setCls('all')
+    setJob('all')
+    setReady('all')
+    setOnlyShort(false)
+    setSort({ key: 'position', desc: false })
+  }
+  const sortBy = (key: SortKey) =>
+    setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: false }))
+  const SortHeader = ({ k, label, num }: { k: SortKey; label: string; num?: boolean }) => (
+    <th className={num ? 'num' : undefined} aria-sort={sort.key === k ? (sort.desc ? 'descending' : 'ascending') : 'none'}>
+      <button className={sort.key === k ? 'sort active' : 'sort'} onClick={() => sortBy(k)}>
+        {label}
+        <span aria-hidden>{sort.key === k ? (sort.desc ? ' ↓' : ' ↑') : ''}</span>
+      </button>
+    </th>
+  )
+
+  // --- Drag and drop: drop above or below the hovered row ------------------
   const [dragging, setDragging] = useState<ShopRow | null>(null)
   const [dropAt, setDropAt] = useState<{ position: number; after: boolean } | null>(null)
   const endDrag = () => {
@@ -428,6 +502,7 @@ function ShopQueue({
     if (dragging && dropAt) {
       const from = dragging.position
       // Final position in the queue once the dragged row is taken out of its old spot.
+      // Positions are real queue positions, so this also works while filtered.
       let to = dropAt.after ? dropAt.position + 1 : dropAt.position
       if (from < to) to -= 1
       if (to !== from) decide('move', dragging.work_order_id, to)
@@ -436,112 +511,175 @@ function ShopQueue({
   }
 
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th aria-label="Drag to reorder" />
-            <th className="num">#</th>
-            <th>Order</th>
-            <th>Vehicle</th>
-            <th>Class</th>
-            <th>Job</th>
-            <th className="num">Hours</th>
-            <th>Ready to rent</th>
-            <th className="num">Shop cost</th>
-            <th>Reorder</th>
-            <th>Vendor</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => {
-            const partial = r.hours_worked > 0 && !r.ready_date
-            return (
-              <tr
-                key={r.work_order_id}
-                className={[
-                  r.ready_date ? '' : 'later',
-                  dragging?.work_order_id === r.work_order_id ? 'dragging' : '',
-                  dropAt?.position === r.position ? (dropAt.after ? 'drop-after' : 'drop-before') : '',
-                ].join(' ')}
-                draggable={!busy}
-                onDragStart={(e) => {
-                  e.dataTransfer.effectAllowed = 'move'
-                  e.dataTransfer.setData('text/plain', r.work_order_id)
-                  setDragging(r)
-                }}
-                onDragOver={(e) => {
-                  if (!dragging) return
-                  e.preventDefault()
-                  const box = e.currentTarget.getBoundingClientRect()
-                  const after = e.clientY > box.top + box.height / 2
-                  if (dropAt?.position !== r.position || dropAt.after !== after) setDropAt({ position: r.position, after })
-                }}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  onDrop()
-                }}
-                onDragEnd={endDrag}
-              >
-                <td className="grip" title="Drag to reorder" aria-hidden>
-                  ⠿
-                </td>
-                <td className="num">{r.position}</td>
-                <td className="mono">{r.work_order_id}</td>
-                <td className="mono muted">{jobs[r.work_order_id]?.vehicle_id}</td>
-                <td>{className(r.vehicle_class)}</td>
-                <td>{jobName(r.job_type)}</td>
-                <td className="num">{r.shop_hours}</td>
-                <td>
-                  {r.ready_date ? day(r.ready_date) : partial ? 'Not this week (started)' : 'Not this week'}
-                </td>
-                <td className="num">{r.shop_cost ? money(r.shop_cost) : '–'}</td>
-                <td>
-                  <div className="reorder">
-                  <button
-                    aria-label="Move up"
-                    disabled={busy || r.position === 1}
-                    onClick={() => decide('move', r.work_order_id, r.position - 1)}
-                  >
-                    ▲
-                  </button>
-                  <button
-                    aria-label="Move down"
-                    disabled={busy || r.position === rows.length}
-                    onClick={() => decide('move', r.work_order_id, r.position + 1)}
-                  >
-                    ▼
-                  </button>
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault()
-                      const to = parseInt(moveTo[r.work_order_id] ?? '', 10)
-                      if (to) decide('move', r.work_order_id, to)
-                      setMoveTo({ ...moveTo, [r.work_order_id]: '' })
-                    }}
-                  >
-                    <input
-                      aria-label={`Move ${r.work_order_id} to position`}
-                      placeholder="#"
-                      inputMode="numeric"
-                      value={moveTo[r.work_order_id] ?? ''}
-                      onChange={(e) => setMoveTo({ ...moveTo, [r.work_order_id]: e.target.value })}
-                    />
-                  </form>
-                  </div>
-                </td>
-                <td>
-                  <button disabled={busy} title={impactText('send_to_vendor', r.work_order_id, previews, costs)} onClick={() => decide('send_to_vendor', r.work_order_id)}>
-                    Send to vendor
-                  </button>
-                  <span className="price">{money(jobs[r.work_order_id]?.vendor_price ?? 0)}</span>
+    <>
+      <div className="filters">
+        <input
+          className="search"
+          type="search"
+          placeholder="Search order or vehicle"
+          aria-label="Search by order or vehicle ID"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select aria-label="Class" value={cls} onChange={(e) => setCls(e.target.value)}>
+          <option value="all">All classes</option>
+          {classes.map((c) => (
+            <option key={c} value={c}>
+              {className(c)}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Job type" value={job} onChange={(e) => setJob(e.target.value)}>
+          <option value="all">All jobs</option>
+          {jobTypes.map((j) => (
+            <option key={j} value={j}>
+              {jobName(j)}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Ready this week" value={ready} onChange={(e) => setReady(e.target.value as ReadyFilter)}>
+          <option value="all">Any ready date</option>
+          <option value="ready">Ready this week</option>
+          <option value="not_ready">Not this week</option>
+        </select>
+        <label className={onlyShort ? 'chip on' : 'chip'}>
+          <input type="checkbox" checked={onlyShort} onChange={(e) => setOnlyShort(e.target.checked)} />
+          Only classes with shortages
+        </label>
+        <span className="muted count">
+          Showing {shown.length} of {rows.length}
+        </span>
+        {(filtered || !queueOrder) && (
+          <button className="link" onClick={clear}>
+            Clear
+          </button>
+        )}
+      </div>
+      {!queueOrder && (
+        <p className="note-bar">
+          Sorted view: reordering is off. Click <strong>#</strong> to return to queue order and drag jobs again.
+        </p>
+      )}
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th aria-label="Drag to reorder" />
+              <SortHeader k="position" label="#" num />
+              <th>Order</th>
+              <th>Vehicle</th>
+              <SortHeader k="vehicle_class" label="Class" />
+              <SortHeader k="job_type" label="Job" />
+              <SortHeader k="shop_hours" label="Hours" num />
+              <SortHeader k="ready_date" label="Ready to rent" />
+              <SortHeader k="shop_cost" label="Shop cost" num />
+              <th>Reorder</th>
+              <th>Vendor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.length === 0 && (
+              <tr>
+                <td colSpan={11} className="muted empty">
+                  No jobs match these filters.
                 </td>
               </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+            )}
+            {shown.map((r) => {
+              const partial = r.hours_worked > 0 && !r.ready_date
+              return (
+                <tr
+                  key={r.work_order_id}
+                  className={[
+                    r.ready_date ? '' : 'later',
+                    dragging?.work_order_id === r.work_order_id ? 'dragging' : '',
+                    dropAt?.position === r.position ? (dropAt.after ? 'drop-after' : 'drop-before') : '',
+                  ].join(' ')}
+                  draggable={canReorder}
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = 'move'
+                    e.dataTransfer.setData('text/plain', r.work_order_id)
+                    setDragging(r)
+                  }}
+                  onDragOver={(e) => {
+                    if (!dragging) return
+                    e.preventDefault()
+                    const box = e.currentTarget.getBoundingClientRect()
+                    const after = e.clientY > box.top + box.height / 2
+                    if (dropAt?.position !== r.position || dropAt.after !== after) setDropAt({ position: r.position, after })
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    onDrop()
+                  }}
+                  onDragEnd={endDrag}
+                >
+                  <td className={canReorder ? 'grip' : 'grip off'} title={canReorder ? 'Drag to reorder' : undefined} aria-hidden>
+                    ⠿
+                  </td>
+                  <td className="num">{r.position}</td>
+                  <td className="mono">{r.work_order_id}</td>
+                  <td className="mono muted">{jobs[r.work_order_id]?.vehicle_id}</td>
+                  <td>
+                    {className(r.vehicle_class)}
+                    {shortClasses.has(r.vehicle_class) && <span className="tag short-tag">short</span>}
+                  </td>
+                  <td>{jobName(r.job_type)}</td>
+                  <td className="num">{r.shop_hours}</td>
+                  <td>{r.ready_date ? day(r.ready_date) : partial ? 'Not this week (started)' : 'Not this week'}</td>
+                  <td className="num">{r.shop_cost ? money(r.shop_cost) : '–'}</td>
+                  <td>
+                    <div className="reorder">
+                      <button
+                        aria-label="Move up"
+                        disabled={!canReorder || r.position === 1}
+                        onClick={() => decide('move', r.work_order_id, r.position - 1)}
+                      >
+                        ▲
+                      </button>
+                      <button
+                        aria-label="Move down"
+                        disabled={!canReorder || r.position === rows.length}
+                        onClick={() => decide('move', r.work_order_id, r.position + 1)}
+                      >
+                        ▼
+                      </button>
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          const to = parseInt(moveTo[r.work_order_id] ?? '', 10)
+                          if (to && canReorder) decide('move', r.work_order_id, to)
+                          setMoveTo({ ...moveTo, [r.work_order_id]: '' })
+                        }}
+                      >
+                        <input
+                          aria-label={`Move ${r.work_order_id} to position`}
+                          placeholder="#"
+                          inputMode="numeric"
+                          disabled={!canReorder}
+                          value={moveTo[r.work_order_id] ?? ''}
+                          onChange={(e) => setMoveTo({ ...moveTo, [r.work_order_id]: e.target.value })}
+                        />
+                      </form>
+                    </div>
+                  </td>
+                  <td>
+                    <button
+                      disabled={busy}
+                      title={impactText('send_to_vendor', r.work_order_id, previews, costs)}
+                      onClick={() => decide('send_to_vendor', r.work_order_id)}
+                    >
+                      Send to vendor
+                    </button>
+                    <span className="price">{money(jobs[r.work_order_id]?.vendor_price ?? 0)}</span>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
   )
 }
 
