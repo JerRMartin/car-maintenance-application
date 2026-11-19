@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import './App.css'
 
 // ---------------------------------------------------------------- types ----
@@ -1075,6 +1075,8 @@ function ShopQueue({
   }, [rows, jobs, search, cls, job, hours, ready, onlyShort, shortClasses, sort])
 
   const filtered = shown.length !== rows.length
+  // Where the week's shop hours run out (queue order only): first shown job that isn't ready this week
+  const weekCut = sort.key === 'position' && !sort.desc ? shown.findIndex((r) => !r.ready_date) : -1
   const queueOrder = sort.key === 'position' && !sort.desc
   const canReorder = !busy && queueOrder
   const clear = () => {
@@ -1198,11 +1200,18 @@ function ShopQueue({
                 </td>
               </tr>
             )}
-            {shown.map((r) => {
+            {shown.map((r, i) => {
               const partial = r.hours_worked > 0 && !r.ready_date
               return (
+                <Fragment key={r.work_order_id}>
+                {i === weekCut && (
+                  <tr className="week-cut">
+                    <td colSpan={11}>
+                      <span>End of this week's shop hours</span> Jobs below won't be ready to rent this week.
+                    </td>
+                  </tr>
+                )}
                 <tr
-                  key={r.work_order_id}
                   className={[
                     r.ready_date ? '' : 'later',
                     dragging?.work_order_id === r.work_order_id ? 'dragging' : '',
@@ -1289,6 +1298,7 @@ function ShopQueue({
                     </span>
                   </td>
                 </tr>
+                </Fragment>
               )
             })}
           </tbody>
