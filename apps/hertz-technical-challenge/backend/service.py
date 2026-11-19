@@ -220,6 +220,7 @@ def get_week() -> dict:
     return {
         "week": week.to_dict(),
         "baseline_total": round(baseline, 2),
+        "short_classes": sorted(planner.short_classes(inputs, cfg)),   # short before any repairs
         "suggested_total": round(planner.simulate(planner.short_first_plan(plan, inputs, cfg), inputs, cfg).costs.total, 2),
         "previews": _previews(plan, inputs, cfg, week.costs.total),
         "jobs": {k: {"vehicle_id": j.vehicle_id, "in_house": j.in_house,

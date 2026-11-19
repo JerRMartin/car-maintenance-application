@@ -72,6 +72,7 @@ interface WeekResponse {
   }
   baseline_total: number
   suggested_total: number
+  short_classes: string[]
   previews: Record<string, Partial<Record<Assignment, Preview>>>
   jobs: Record<string, { vehicle_id: string; in_house: boolean; vendor_price: number; vendor_days: number }>
   decisions: Decision[]
@@ -161,7 +162,8 @@ export default function App() {
   const { week, previews, decisions } = data
   const days = week.week_days
   const weekLabel = `${day(days[0])} – ${day(days[days.length - 1])}`
-  const shortClasses = new Set(week.shortages.filter((c) => c.short > 0).map((c) => c.vehicle_class))
+  // Classes that need cars this week (short before any repairs): same rule as "Use suggested order"
+  const shortClasses = new Set(data.short_classes)
   const meta = PAGES.find((p) => p.id === page) ?? PAGES[0]
   const counts: Partial<Record<Page, number>> = {
     queue: week.shop_queue.length,
@@ -398,7 +400,7 @@ function TodayQueue({
                 <td className="mono">{r.work_order_id}</td>
                 <td>
                   {className(r.vehicle_class)}
-                  {shortClasses.has(r.vehicle_class) && <span className="tag short-tag">short</span>}
+                  {shortClasses.has(r.vehicle_class) && <span className="tag short-tag" title="Reservations exceed cars ready on at least one day of the plan week">short</span>}
                 </td>
                 <td>{jobName(r.job_type)}</td>
                 <td className="num">{hours === r.shop_hours ? hours : `${+hours.toFixed(2)} of ${r.shop_hours}`}</td>
@@ -805,7 +807,7 @@ function DayBoard({ rows, costs, busy, decide, jobs, shortClasses, previews, sho
                 </div>
                 <div className="card-class">
                   {className(r.vehicle_class)}
-                  {shortClasses.has(r.vehicle_class) && <span className="tag short-tag">short</span>}
+                  {shortClasses.has(r.vehicle_class) && <span className="tag short-tag" title="Reservations exceed cars ready on at least one day of the plan week">short</span>}
                 </div>
                 <div className="card-job">
                   {jobName(r.job_type)} ·{' '}
@@ -1085,7 +1087,7 @@ function ShopQueue({
                   <td className="mono muted">{jobs[r.work_order_id]?.vehicle_id}</td>
                   <td>
                     {className(r.vehicle_class)}
-                    {shortClasses.has(r.vehicle_class) && <span className="tag short-tag">short</span>}
+                    {shortClasses.has(r.vehicle_class) && <span className="tag short-tag" title="Reservations exceed cars ready on at least one day of the plan week">short</span>}
                   </td>
                   <td>{jobName(r.job_type)}</td>
                   <td className="num">{r.shop_hours}</td>
