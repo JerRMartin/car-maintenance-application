@@ -361,7 +361,8 @@ function ShopQueue({
                   {r.ready_date ? day(r.ready_date) : partial ? 'Not this week (started)' : 'Not this week'}
                 </td>
                 <td className="num">{r.shop_cost ? money(r.shop_cost) : '–'}</td>
-                <td className="reorder">
+                <td>
+                  <div className="reorder">
                   <button
                     aria-label="Move up"
                     disabled={busy || r.position === 1}
@@ -392,6 +393,7 @@ function ShopQueue({
                       onChange={(e) => setMoveTo({ ...moveTo, [r.work_order_id]: e.target.value })}
                     />
                   </form>
+                  </div>
                 </td>
                 <td>
                   <button disabled={busy} onClick={() => decide('send_to_vendor', r.work_order_id)}>
@@ -450,7 +452,8 @@ function VendorList({
               </td>
               <td className="num">{money(r.vendor_price)}</td>
               <td>{day(r.ready_date)}</td>
-              <td className="stack">
+              <td>
+                <div className="stack">
                 {r.in_house && (
                   <span>
                     <button disabled={busy} onClick={() => decide('bring_to_shop', r.work_order_id)}>
@@ -465,6 +468,7 @@ function VendorList({
                   </button>
                   <Effect p={previews[r.work_order_id]?.hold} />
                 </span>
+              </div>
               </td>
             </tr>
           ))}
@@ -506,7 +510,8 @@ function HeldList({
                 {jobName(r.job_type)}
                 {!r.in_house && <span className="tag">vendor-only</span>}
               </td>
-              <td className="stack">
+              <td>
+                <div className="stack">
                 {r.in_house && (
                   <span>
                     <button disabled={busy} onClick={() => decide('bring_to_shop', r.work_order_id)}>
@@ -521,6 +526,7 @@ function HeldList({
                   </button>
                   <Effect p={previews[r.work_order_id]?.vendor} />
                 </span>
+              </div>
               </td>
             </tr>
           ))}
