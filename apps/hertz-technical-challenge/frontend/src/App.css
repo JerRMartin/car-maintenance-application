@@ -1121,3 +1121,22 @@ tbody tr.week-cut:hover td {
   font-weight: 600;
   text-align: center;
 }
+
+/* By day: list grouped by day */
+tr.day-divider td,
+tbody tr.day-divider:hover td {
+  padding: 6px 12px;
+  background: #f0efeb;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+tr.day-divider.drop-here td {
+  box-shadow: inset 0 -3px 0 var(--yellow);
+}
+.cost-later {
+  font-style: italic;
+  border-bottom: 1px dotted var(--muted);
+  cursor: help;
+}

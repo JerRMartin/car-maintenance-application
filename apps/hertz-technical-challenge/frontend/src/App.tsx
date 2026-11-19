@@ -836,7 +836,8 @@ interface BoardCard {
 }
 
 function DayBoard({ rows, costs, busy, decide, jobs, shortClasses, previews, shopDays, hoursPerDay }: QueueProps) {
-  const columns = useMemo(() => {
+  // Group the queue by the day each job is worked (a job split across days appears under both).
+  const groups = useMemo(() => {
     const byDay = shopDays.map((d) => ({ key: d, cards: [] as BoardCard[] }))
     const later: BoardCard[] = []
     for (const row of rows) {
@@ -845,23 +846,16 @@ function DayBoard({ rows, costs, busy, decide, jobs, shortClasses, previews, sho
         continue
       }
       row.segments.forEach((seg, i) => {
-        const col = byDay.find((c) => c.key === seg.day)
-        col?.cards.push({
-          row,
-          hours: seg.hours,
-          continued: i > 0,
-          continues: i < row.segments.length - 1 || !row.ready_date,
-        })
+        byDay
+          .find((g) => g.key === seg.day)
+          ?.cards.push({ row, hours: seg.hours, continued: i > 0, continues: i < row.segments.length - 1 || !row.ready_date })
       })
     }
     return { byDay, later }
   }, [rows, shopDays])
 
   const [dragging, setDragging] = useState<ShopRow | null>(null)
-  const [dropAt, setDropAt] = useState<{ col: string; position: number; after: boolean } | null>(null)
-  const [showAllLater, setShowAllLater] = useState(false)
-  const LATER_PREVIEW = 6
-  const weekday = (iso: string | null) => (iso ? parseDay(iso).toLocaleDateString('en-US', { weekday: 'short' }) : '')
+  const [dropAt, setDropAt] = useState<{ group: string; position: number; after: boolean } | null>(null)
   const endDrag = () => {
     setDragging(null)
     setDropAt(null)
@@ -873,131 +867,134 @@ function DayBoard({ rows, costs, busy, decide, jobs, shortClasses, previews, sho
     }
     endDrag()
   }
-  // Dropping on empty space at the bottom of a column = after its last job.
-  const overColumn = (col: string, cards: BoardCard[]) => (e: DragEvent<HTMLDivElement>) => {
-    if (!dragging || !cards.length) return
-    e.preventDefault()
-    const last = cards[cards.length - 1].row.position
-    if (dropAt?.col !== col || dropAt.position !== last || !dropAt.after) setDropAt({ col, position: last, after: true })
-  }
+  const longDay = (iso: string) =>
+    parseDay(iso).toLocaleDateString('en-US', { weekday: 'long', month: 'numeric', day: 'numeric' })
 
-  const renderColumn = (key: string, title: string, cards: BoardCard[], isLater = false) => {
-    const used = cards.reduce((sum, c) => sum + c.hours, 0)
-    const pct = Math.min(100, (used / hoursPerDay) * 100)
+  const divider = (key: string, label: string, cards: BoardCard[]) => {
+    const target = cards[0]?.row.position
     return (
-      <div
-        key={key}
-        className={isLater ? 'day-col later-col' : 'day-col'}
-        onDragOver={overColumn(key, cards)}
+      <tr
+        key={`div-${key}`}
+        className={['day-divider', dropAt?.group === key && dropAt.position === target && !dropAt.after ? 'drop-here' : ''].join(' ')}
+        onDragOver={(e) => {
+          if (!dragging || target === undefined) return
+          e.preventDefault()
+          if (dropAt?.group !== key || dropAt.position !== target || dropAt.after) setDropAt({ group: key, position: target, after: false })
+        }}
         onDrop={(e) => {
           e.preventDefault()
           drop()
         }}
       >
-        <div className="day-head">
-          <span className="day-title">{title}</span>
-          {isLater ? (
-            <span className="muted day-sub">
-              {cards.length} jobs · {used} hrs of work
+        <td colSpan={8}>{label}</td>
+      </tr>
+    )
+  }
+
+  const jobRow = (key: string, c: BoardCard) => {
+    const r = c.row
+    const marker = dropAt?.group === key && dropAt.position === r.position ? (dropAt.after ? 'drop-after' : 'drop-before') : ''
+    return (
+      <tr
+        key={`${r.work_order_id}-${key}`}
+        className={[c.continued ? 'later' : '', dragging?.work_order_id === r.work_order_id ? 'dragging' : '', marker].join(' ')}
+        draggable={!busy}
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = 'move'
+          e.dataTransfer.setData('text/plain', r.work_order_id)
+          setDragging(r)
+        }}
+        onDragOver={(e) => {
+          if (!dragging) return
+          e.preventDefault()
+          const box = e.currentTarget.getBoundingClientRect()
+          const after = e.clientY > box.top + box.height / 2
+          if (dropAt?.group !== key || dropAt.position !== r.position || dropAt.after !== after)
+            setDropAt({ group: key, position: r.position, after })
+        }}
+        onDrop={(e) => {
+          e.preventDefault()
+          drop()
+        }}
+        onDragEnd={endDrag}
+      >
+        <td className="grip" title="Drag to reschedule" aria-hidden>
+          ⠿
+        </td>
+        <td className="num">{r.position}</td>
+        <td className="mono">{r.work_order_id}</td>
+        <td>
+          {className(r.vehicle_class)}
+          {shortClasses.has(r.vehicle_class) && (
+            <span className="tag short-tag" title="Reservations exceed cars ready on at least one day of the plan week">
+              short
             </span>
-          ) : (
+          )}
+        </td>
+        <td>{jobName(r.job_type)}</td>
+        <td className="num">{c.hours === r.shop_hours ? r.shop_hours : `${+c.hours.toFixed(2)} of ${r.shop_hours}`}</td>
+        <td>
+          {key === 'later'
+            ? 'Not this week'
+            : c.continues
+              ? r.ready_date
+                ? `Continues, ready ${day(r.ready_date)}`
+                : 'Continues next week'
+              : day(r.ready_date)}
+        </td>
+        <td>
+          {!c.continued && (
             <>
-              <div className="bar" aria-hidden>
-                <div style={{ width: `${pct}%` }} />
-              </div>
-              <span className="muted day-sub">
-                {+used.toFixed(2)} / {hoursPerDay} hrs · {cards.length} jobs
+              <button
+                disabled={busy}
+                title={impactText('send_to_vendor', r.work_order_id, previews, costs)}
+                onClick={() => decide('send_to_vendor', r.work_order_id)}
+              >
+                Send to vendor
+              </button>
+              <span className="price">
+                {money(jobs[r.work_order_id]?.vendor_price ?? 0)} · {daysText(jobs[r.work_order_id]?.vendor_days ?? 0)}
               </span>
             </>
           )}
-        </div>
-        <div className="day-cards">
-          {(isLater && !showAllLater ? cards.slice(0, LATER_PREVIEW) : cards).map((c) => {
-            const r = c.row
-            const marker =
-              dropAt?.col === key && dropAt.position === r.position ? (dropAt.after ? 'drop-after' : 'drop-before') : ''
-            const split = c.continued || c.continues
-            const readyText = isLater
-              ? ''
-              : c.continues
-                ? r.ready_date
-                  ? `→ ${weekday(r.ready_date)}`
-                  : '→ next wk'
-                : `→ ${weekday(r.ready_date)}`
-            return (
-              <div
-                key={`${r.work_order_id}-${key}`}
-                className={[
-                  'job-card',
-                  shortClasses.has(r.vehicle_class) ? 'is-short' : '',
-                  split ? 'split-job' : '',
-                  dragging?.work_order_id === r.work_order_id ? 'dragging' : '',
-                  marker,
-                ].join(' ')}
-                draggable={!busy}
-                onDragStart={(e) => {
-                  e.dataTransfer.effectAllowed = 'move'
-                  e.dataTransfer.setData('text/plain', r.work_order_id)
-                  setDragging(r)
-                }}
-                onDragOver={(e) => {
-                  if (!dragging) return
-                  e.preventDefault()
-                  e.stopPropagation()
-                  const box = e.currentTarget.getBoundingClientRect()
-                  const after = e.clientY > box.top + box.height / 2
-                  if (dropAt?.col !== key || dropAt.position !== r.position || dropAt.after !== after)
-                    setDropAt({ col: key, position: r.position, after })
-                }}
-                onDragEnd={endDrag}
-                title={`#${r.position} in the queue · ${className(r.vehicle_class)} · ${jobName(r.job_type)}${
-                  r.ready_date ? ` · ready ${day(r.ready_date)}` : ''
-                } · drag to another day to reschedule`}
-              >
-                <div className="card-line1">
-                  <span className="mono">{r.work_order_id}</span>
-                  <span className="card-cls">{className(r.vehicle_class)}</span>
-                  <span className="card-pos">#{r.position}</span>
-                </div>
-                <div className="card-line2">
-                  <span className="card-job-name">{jobName(r.job_type)}</span>
-                  <span className="card-hours">
-                    {c.hours === r.shop_hours ? `${r.shop_hours}h` : `${+c.hours.toFixed(2)}/${r.shop_hours}h`}
-                  </span>
-                  {readyText && <span className={c.continues ? 'card-ready muted' : 'card-ready'}>{readyText}</span>}
-                </div>
-                {!c.continued && (
-                  <button
-                    className="card-vendor"
-                    disabled={busy}
-                    title={impactText('send_to_vendor', r.work_order_id, previews, costs)}
-                    onClick={() => decide('send_to_vendor', r.work_order_id)}
-                  >
-                    To vendor · {money(jobs[r.work_order_id]?.vendor_price ?? 0)}
-                  </button>
-                )}
-              </div>
-            )
-          })}
-          {isLater && cards.length > LATER_PREVIEW && (
-            <button className="link show-more" onClick={() => setShowAllLater(!showAllLater)}>
-              {showAllLater ? 'Show fewer' : `Show all ${cards.length}`}
-            </button>
-          )}
-        </div>
-      </div>
+        </td>
+      </tr>
     )
   }
 
   return (
     <>
       <p className="muted board-hint">
-        Each day's {hoursPerDay} tech hours are filled in queue order. Drag a job to another day to reschedule it.{' '}
-        <span className="legend-short">Red edge</span> = class short this week. Hover a card to send it to the vendor.
+        Each day's {hoursPerDay} tech hours are filled in queue order. Drag a job onto another day to reschedule it.
       </p>
-      <div className="board">
-        {columns.byDay.map((c) => renderColumn(c.key, day(c.key), c.cards))}
-        {renderColumn('later', 'Not this week', columns.later, true)}
+      <div className="table-wrap">
+        <table className="by-day">
+          <thead>
+            <tr>
+              <th aria-label="Drag to reschedule" />
+              <th className="num">#</th>
+              <th>Order</th>
+              <th>Class</th>
+              <th>Job</th>
+              <th className="num">Hours</th>
+              <th>Ready to rent</th>
+              <th>Vendor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.byDay.map((g) => {
+              const used = g.cards.reduce((sum, c) => sum + c.hours, 0)
+              return [
+                divider(g.key, `${longDay(g.key)} · ${+used.toFixed(2)} / ${hoursPerDay} hrs · ${g.cards.length} jobs`, g.cards),
+                ...g.cards.map((c) => jobRow(g.key, c)),
+              ]
+            })}
+            {groups.later.length > 0 && [
+              divider('later', `Next week${shopDays.length ? ` (${day(addDays(shopDays[0], 7))})` : ''} · ${groups.later.length} jobs`, groups.later),
+              ...groups.later.map((c) => jobRow('later', c)),
+            ]}
+          </tbody>
+        </table>
       </div>
     </>
   )
@@ -1248,7 +1245,18 @@ function ShopQueue({
                   <td>{jobName(r.job_type)}</td>
                   <td className="num">{r.shop_hours}</td>
                   <td>{r.ready_date ? day(r.ready_date) : partial ? 'Not this week (started)' : 'Not this week'}</td>
-                  <td className="num">{r.shop_cost ? money(r.shop_cost) : '–'}</td>
+                  <td className="num">
+                    {r.shop_cost ? (
+                      money(r.shop_cost)
+                    ) : (
+                      <span
+                        className="muted cost-later"
+                        title="Not started this week, so not in this week's cost. Charged in the week the shop starts it."
+                      >
+                        {money(jobs[r.work_order_id]?.shop_cost ?? 0)}
+                      </span>
+                    )}
+                  </td>
                   <td>
                     <div className="reorder">
                       <button
