@@ -72,6 +72,32 @@ def post_decision(body: DecisionIn, request: Request):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+class GenieIn(BaseModel):
+    question: str
+    conversation_id: str | None = None
+
+
+@app.get("/api/genie/status")
+def genie_status():
+    from backend import genie
+    return {"enabled": genie.space_id() is not None}
+
+
+@app.post("/api/genie")
+def ask_genie(body: GenieIn):
+    """Ask the Genie space a question about the data (continues a conversation if given)."""
+    from backend import genie
+    if not body.question.strip():
+        raise HTTPException(status_code=400, detail="Ask a question")
+    try:
+        return genie.ask(body.question.strip(), body.conversation_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Genie request failed")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @app.get("/api/config")
 def get_config():
     """Planning assumptions, so the UI can show what the numbers are based on."""

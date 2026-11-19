@@ -7,3 +7,6 @@ env:
   # Catalog that holds the bronze / silver / gold schemas.
   - name: HERTZ_CATALOG
     value: hertz
+  # Genie space for the chat panel (resource key must be "genie-space").
+  - name: GENIE_SPACE_ID
+    valueFrom: genie-space

@@ -337,6 +337,7 @@ export default function App() {
           </section>
         )}
       </main>
+      <GenieChat />
       {deferRow && (
         <ConfirmDialog
           title={`Don't send ${deferRow.work_order_id} this week?`}
@@ -1514,6 +1515,182 @@ function VendorBoard({
           </table>
         </div>
       </section>
+    </>
+  )
+}
+
+// ------------------------------------------------------------ Genie chat ----
+interface ChatMessage {
+  role: 'user' | 'genie'
+  text: string
+  sql?: string | null
+  columns?: string[]
+  rows?: (string | null)[][]
+  rowCount?: number
+  error?: boolean
+}
+
+const GENIE_EXAMPLES = [
+  'Which classes are short this week, and on which days?',
+  'How many open work orders are there per class?',
+  'Which open jobs can only be done by the vendor?',
+  'What is the lost revenue per day for each class before repairs?',
+]
+
+// Chat with the Databricks Genie space about the data. Shown only when a space is connected.
+function GenieChat() {
+  const [enabled, setEnabled] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [input, setInput] = useState('')
+  const [thinking, setThinking] = useState(false)
+  const endRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    fetch('/api/genie/status')
+      .then((r) => (r.ok ? r.json() : { enabled: false }))
+      .then((d) => setEnabled(!!d.enabled))
+      .catch(() => setEnabled(false))
+  }, [])
+  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages, thinking])
+
+  const ask = async (question: string) => {
+    const q = question.trim()
+    if (!q || thinking) return
+    setMessages((m) => [...m, { role: 'user', text: q }])
+    setInput('')
+    setThinking(true)
+    try {
+      const r = await fetch('/api/genie', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q, conversation_id: conversationId }),
+      })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.detail ?? r.statusText)
+      setConversationId(d.conversation_id)
+      setMessages((m) => [
+        ...m,
+        {
+          role: 'genie',
+          text: (d.text as string[]).join('\n\n') || (d.rows?.length ? 'Here is what I found:' : 'No answer returned.'),
+          sql: d.sql,
+          columns: d.columns,
+          rows: d.rows,
+          rowCount: d.row_count,
+        },
+      ])
+    } catch (e) {
+      setMessages((m) => [...m, { role: 'genie', text: `Sorry, something went wrong: ${String(e)}`, error: true }])
+    } finally {
+      setThinking(false)
+    }
+  }
+
+  if (!enabled) return null
+  return (
+    <>
+      {open && (
+        <div className="genie-panel" role="dialog" aria-label="Ask Genie about the data">
+          <div className="genie-head">
+            <div>
+              <span className="genie-title">Ask Genie</span>
+              <span className="genie-sub">Questions about the fleet data</span>
+            </div>
+            <div className="genie-head-actions">
+              {messages.length > 0 && (
+                <button
+                  className="link"
+                  onClick={() => {
+                    setMessages([])
+                    setConversationId(null)
+                  }}
+                >
+                  New chat
+                </button>
+              )}
+              <button className="genie-close" aria-label="Close" onClick={() => setOpen(false)}>
+                ×
+              </button>
+            </div>
+          </div>
+          <div className="genie-body">
+            {messages.length === 0 && (
+              <div className="genie-empty">
+                <p className="muted">Ask about work orders, job types, rental demand or rates. Try:</p>
+                {GENIE_EXAMPLES.map((q) => (
+                  <button key={q} className="genie-chip" onClick={() => ask(q)}>
+                    {q}
+                  </button>
+                ))}
+                <p className="genie-note">Genie reads the data tables, not the plan saved in this app.</p>
+              </div>
+            )}
+            {messages.map((m, i) => (
+              <div key={i} className={`genie-msg ${m.role}${m.error ? ' error' : ''}`}>
+                <div className="genie-text">{m.text}</div>
+                {m.columns && m.columns.length > 0 && m.rows && (
+                  <div className="genie-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          {m.columns.map((c) => (
+                            <th key={c}>{c}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {m.rows.map((row, ri) => (
+                          <tr key={ri}>
+                            {row.map((v, ci) => (
+                              <td key={ci}>{v ?? '–'}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {m.rowCount !== undefined && m.rowCount > m.rows.length && (
+                      <p className="muted genie-more">
+                        Showing {m.rows.length} of {m.rowCount} rows
+                      </p>
+                    )}
+                  </div>
+                )}
+                {m.sql && (
+                  <details className="genie-sql">
+                    <summary>SQL</summary>
+                    <pre>{m.sql}</pre>
+                  </details>
+                )}
+              </div>
+            ))}
+            {thinking && <div className="genie-msg genie thinking">Genie is thinking…</div>}
+            <div ref={endRef} />
+          </div>
+          <form
+            className="genie-input"
+            onSubmit={(e) => {
+              e.preventDefault()
+              ask(input)
+            }}
+          >
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask a question about the data…"
+              aria-label="Question for Genie"
+              disabled={thinking}
+            />
+            <button type="submit" className="btn-primary" disabled={thinking || !input.trim()}>
+              Ask
+            </button>
+          </form>
+        </div>
+      )}
+      <button className="genie-fab" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? '×' : '✦ Ask Genie'}
+      </button>
     </>
   )
 }
