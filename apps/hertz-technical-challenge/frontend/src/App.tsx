@@ -258,13 +258,13 @@ function Sidebar() {
   )
 }
 
-// Official logo goes in frontend/public/hertz-logo.svg; until then, show the name as text.
+// Official logo: frontend/public/Hertz_logo.jpg (falls back to the name as text if missing).
 function Brand() {
   const [logoOk, setLogoOk] = useState(true)
   return (
     <div className="brand">
       {logoOk ? (
-        <img src="/hertz-logo.svg" alt="Hertz" onError={() => setLogoOk(false)} />
+        <img src="/Hertz_logo.jpg" alt="Hertz" onError={() => setLogoOk(false)} />
       ) : (
         <span className="brand-text">Hertz</span>
       )}

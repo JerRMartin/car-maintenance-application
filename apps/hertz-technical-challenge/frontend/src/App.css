@@ -75,9 +75,10 @@ body {
   padding: 4px 10px 22px;
 }
 .brand img {
-  height: 30px;
+  height: 34px;
   width: auto;
   align-self: flex-start;
+  mix-blend-mode: multiply; /* the JPG's white background blends into the sidebar */
 }
 .brand-text {
   font-size: 28px;
