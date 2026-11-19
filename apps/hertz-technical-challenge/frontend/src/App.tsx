@@ -531,10 +531,10 @@ type Page = 'summary' | 'shortages' | 'queue' | 'vendor' | 'log'
 
 const PAGES: { id: Page; label: string; subtitle: string }[] = [
   { id: 'summary', label: 'Summary', subtitle: 'The week at a glance.' },
-  { id: 'shortages', label: 'Cars short', subtitle: 'Customers without a car, by class and day.' },
+  { id: 'shortages', label: 'Cars Short', subtitle: 'Customers without a car, by class and day.' },
   { id: 'queue', label: 'In-House Repairs', subtitle: 'Worked top to bottom. Reorder jobs, or send one to the vendor.' },
   { id: 'vendor', label: 'Vendor Repairs', subtitle: 'What goes to the outside vendor, when it is sent, and when it is back to rent.' },
-  { id: 'log', label: 'Decision log', subtitle: 'Every change, who made it, and what it did to the week.' },
+  { id: 'log', label: 'Decision Log', subtitle: 'Every change, who made it, and what it did to the week.' },
 ]
 
 // Pages live in the URL hash (#/queue) so back/forward and refresh work
