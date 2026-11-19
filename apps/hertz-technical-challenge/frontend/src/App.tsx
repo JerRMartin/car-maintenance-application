@@ -108,6 +108,7 @@ export default function App() {
   const [data, setData] = useState<WeekResponse | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const page = usePage()
 
   const load = useCallback(async () => {
     try {
@@ -154,21 +155,24 @@ export default function App() {
 
   const { week, previews, decisions } = data
   const days = week.week_days
-
   const weekLabel = `${day(days[0])} – ${day(days[days.length - 1])}`
+  const shortClasses = new Set(week.shortages.filter((c) => c.short > 0).map((c) => c.vehicle_class))
+  const meta = PAGES.find((p) => p.id === page) ?? PAGES[0]
+  const counts: Partial<Record<Page, number>> = {
+    queue: week.shop_queue.length,
+    vendor: week.vendor.length,
+    log: decisions.length,
+  }
 
   return (
     <div className={busy ? 'layout busy' : 'layout'}>
-      <Sidebar />
+      <Sidebar page={page} counts={counts} />
       <main className="page">
         <header className="top">
           <div>
             <p className="eyebrow">Fleet maintenance · {weekLabel}</p>
-            <h1>Maintenance planner</h1>
-            <p className="muted">
-              Shop: {data.config.shop.tech_hours_per_day} tech hrs/day, {data.config.shop.open_days.join('–')} · $
-              {data.config.shop.labor_rate_per_hour}/hr · Vendor budget {money(data.config.vendor.weekly_budget)}/week
-            </p>
+            <h1>{meta.label}</h1>
+            <p className="muted">{meta.subtitle}</p>
           </div>
           <div className="top-actions">
             <button className="btn-primary" disabled title="Coming next: we're agreeing the ranking rule first">
@@ -187,79 +191,112 @@ export default function App() {
         )}
         {error && <p className="error">{error}</p>}
 
-        <section id="summary">
-          <SectionTitle title="Summary" subtitle="Cost of the week at a glance." badge={weekLabel} />
-          <CostCards costs={week.costs} baseline={data.baseline_total} />
-        </section>
+        {page === 'summary' && (
+          <>
+            <section>
+              <SectionTitle title="Cost of the week" subtitle="Shop + vendor + lost revenue, Monday to Sunday." badge={weekLabel} />
+              <CostCards costs={week.costs} baseline={data.baseline_total} />
+              <p className="muted assumptions">
+                Shop: {data.config.shop.tech_hours_per_day} tech hrs/day, {data.config.shop.open_days.join('–')} · $
+                {data.config.shop.labor_rate_per_hour}/hr · Vendor budget {money(data.config.vendor.weekly_budget)}/week
+              </p>
+            </section>
+            <section>
+              <SectionTitle title="Latest decisions" subtitle="The most recent changes to the plan." />
+              <DecisionLog decisions={decisions.slice(0, 5)} />
+              <a className="see-all" href="#/log">
+                View the full decision log →
+              </a>
+            </section>
+          </>
+        )}
 
-        <section id="shortages">
-          <SectionTitle title="Cars short per day" subtitle="Customers without a car, by class and day." />
-          <ShortageGrid cells={week.shortages} days={days} />
-        </section>
+        {page === 'shortages' && (
+          <section>
+            <ShortageGrid cells={week.shortages} days={days} />
+          </section>
+        )}
 
-        <section id="queue">
-          <SectionTitle
-            title="Shop queue"
-            subtitle="Worked top to bottom. Reorder jobs, or send one to the vendor."
-          />
-          <ShopQueue
-            rows={week.shop_queue}
-            previews={previews}
-            costs={week.costs}
-            busy={busy}
-            decide={decide}
-            jobs={data.jobs}
-            shortClasses={new Set(week.shortages.filter((c) => c.short > 0).map((c) => c.vehicle_class))}
-          />
-        </section>
+        {page === 'queue' && (
+          <>
+            <section>
+              <CostCards costs={week.costs} baseline={data.baseline_total} />
+            </section>
+            <section>
+              <ShopQueue
+                rows={week.shop_queue}
+                previews={previews}
+                costs={week.costs}
+                busy={busy}
+                decide={decide}
+                jobs={data.jobs}
+                shortClasses={shortClasses}
+              />
+            </section>
+          </>
+        )}
 
-        <section id="vendor">
-          <SectionTitle title="Sent to vendor" subtitle="Ready to rent on the date shown." />
-          <VendorList rows={week.vendor} previews={previews} costs={week.costs} busy={busy} decide={decide} />
-        </section>
+        {page === 'vendor' && (
+          <>
+            <section>
+              <CostCards costs={week.costs} baseline={data.baseline_total} />
+            </section>
+            <section>
+              <VendorList rows={week.vendor} previews={previews} costs={week.costs} busy={busy} decide={decide} />
+            </section>
+          </>
+        )}
 
-        <section id="log">
-          <SectionTitle title="Decision log" subtitle="Every change, who made it, and what it did to the week." />
-          <DecisionLog decisions={decisions} />
-        </section>
+        {page === 'log' && (
+          <section>
+            <DecisionLog decisions={decisions} />
+          </section>
+        )}
       </main>
     </div>
   )
 }
 
 // ------------------------------------------------------------- layout ----
-const NAV = [
-  { id: 'summary', label: 'Summary' },
-  { id: 'shortages', label: 'Cars short' },
-  { id: 'queue', label: 'Shop queue' },
-  { id: 'vendor', label: 'Sent to vendor' },
-  { id: 'log', label: 'Decision log' },
+type Page = 'summary' | 'shortages' | 'queue' | 'vendor' | 'log'
+
+const PAGES: { id: Page; label: string; subtitle: string }[] = [
+  { id: 'summary', label: 'Summary', subtitle: 'The week at a glance.' },
+  { id: 'shortages', label: 'Cars short', subtitle: 'Customers without a car, by class and day.' },
+  { id: 'queue', label: 'Shop queue', subtitle: 'Worked top to bottom. Reorder jobs, or send one to the vendor.' },
+  { id: 'vendor', label: 'Sent to vendor', subtitle: 'Ready to rent on the date shown. Bring a job back to repair it in house.' },
+  { id: 'log', label: 'Decision log', subtitle: 'Every change, who made it, and what it did to the week.' },
 ]
 
-function Sidebar() {
-  const [active, setActive] = useState('summary')
+// Pages live in the URL hash (#/queue) so back/forward and refresh work
+// without the server needing to know about each page.
+function readPage(): Page {
+  const id = window.location.hash.replace(/^#\/?/, '')
+  return PAGES.some((p) => p.id === id) ? (id as Page) : 'summary'
+}
+
+function usePage(): Page {
+  const [page, setPage] = useState<Page>(readPage)
   useEffect(() => {
-    // Highlight the section currently in view.
-    const obs = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
-        if (visible[0]) setActive(visible[0].target.id)
-      },
-      { rootMargin: '-10% 0px -70% 0px' },
-    )
-    NAV.forEach((n) => {
-      const el = document.getElementById(n.id)
-      if (el) obs.observe(el)
-    })
-    return () => obs.disconnect()
+    const onChange = () => {
+      setPage(readPage())
+      window.scrollTo(0, 0)
+    }
+    window.addEventListener('hashchange', onChange)
+    return () => window.removeEventListener('hashchange', onChange)
   }, [])
+  return page
+}
+
+function Sidebar({ page, counts }: { page: Page; counts: Partial<Record<Page, number>> }) {
   return (
-    <nav className="sidebar" aria-label="Sections">
+    <nav className="sidebar" aria-label="Pages">
       <Brand />
       <p className="nav-group">Planner</p>
-      {NAV.map((n) => (
-        <a key={n.id} href={`#${n.id}`} className={active === n.id ? 'nav-item active' : 'nav-item'} onClick={() => setActive(n.id)}>
-          {n.label}
+      {PAGES.map((p) => (
+        <a key={p.id} href={`#/${p.id}`} className={page === p.id ? 'nav-item active' : 'nav-item'} aria-current={page === p.id ? 'page' : undefined}>
+          {p.label}
+          {counts[p.id] != null && <span className="nav-count">{counts[p.id]}</span>}
         </a>
       ))}
     </nav>

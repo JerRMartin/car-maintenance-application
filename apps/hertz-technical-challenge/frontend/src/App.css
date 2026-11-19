@@ -33,7 +33,7 @@ body {
 /* ---------------------------------------------------------------- layout */
 .layout {
   display: grid;
-  grid-template-columns: 232px 1fr;
+  grid-template-columns: 232px minmax(0, 1fr); /* minmax(0,…) lets wide tables scroll instead of stretching the page */
   min-height: 100vh;
 }
 .layout.busy {
@@ -42,11 +42,12 @@ body {
 .page {
   max-width: 1240px;
   width: 100%;
+  min-width: 0;
   padding: 28px 32px 72px;
 }
 @media (max-width: 900px) {
   .layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .sidebar {
     display: none;
@@ -234,7 +235,7 @@ button:disabled {
 /* ------------------------------------------------------------ KPI cards */
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
   gap: 14px;
 }
 .card {
@@ -526,4 +527,63 @@ td.empty {
 .short-tag {
   background: var(--bad-bg);
   color: var(--bad);
+}
+
+/* ----------------------------------------------------------- pages/nav */
+.nav-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.nav-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: #e8e7e3;
+  border-radius: 999px;
+  padding: 0 8px;
+}
+.nav-item.active .nav-count {
+  background: var(--yellow);
+  color: var(--ink);
+}
+.assumptions {
+  margin-top: 10px;
+  font-size: 13px;
+}
+.see-all {
+  display: inline-block;
+  margin-top: 10px;
+  color: var(--teal);
+  font-weight: 600;
+}
+section:first-of-type {
+  margin-top: 28px;
+}
+
+/* Small screens: the sidebar becomes a scrollable tab row at the top */
+@media (max-width: 900px) {
+  .sidebar {
+    display: flex;
+    position: static;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    gap: 6px;
+    padding: 10px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar .brand {
+    padding: 0 10px 0 0;
+  }
+  .sidebar .brand-product,
+  .sidebar .nav-group {
+    display: none;
+  }
+  .nav-item {
+    white-space: nowrap;
+    gap: 6px;
+  }
 }
