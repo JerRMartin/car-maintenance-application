@@ -35,6 +35,7 @@ class DecisionIn(BaseModel):
     action: str
     work_order_id: str | None = None
     to_position: int | None = None
+    goal: str | None = None              # for use_suggested: "savings" (default) or "readiness"
 
 
 def _user(request: Request) -> str:
@@ -63,7 +64,7 @@ def post_decision(body: DecisionIn, request: Request):
     """Save one manager decision, then return the updated week."""
     from backend import service
     try:
-        return service.decide(body.action, _user(request), body.work_order_id, body.to_position)
+        return service.decide(body.action, _user(request), body.work_order_id, body.to_position, body.goal)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:

@@ -102,12 +102,13 @@ def _sync_with_open_jobs(plan: list[PlanItem], inputs: Inputs) -> tuple[list[Pla
 
 
 def _release_held(plan: list[PlanItem], inputs: Inputs) -> tuple[list[PlanItem], list[store.Decision]]:
-    """Hold was removed from the app; return held jobs to the shop or vendor."""
+    """In-house jobs can't be held (they go to the shop or vendor); vendor-only jobs may be
+    held, meaning "send next week". Release any in-house job still on hold."""
     events = []
     out = []
     for p in plan:
-        if p.assignment == HOLD:
-            to = SHOP if inputs.jobs[p.work_order_id].in_house else VENDOR
+        if p.assignment == HOLD and inputs.jobs[p.work_order_id].in_house:
+            to = SHOP
             out.append(PlanItem(p.work_order_id, to))
             events.append(store.Decision("bring_to_shop" if to == SHOP else "send_to_vendor", "system",
                                          p.work_order_id, {"from": HOLD, "to": to, "reason": "hold removed"}))
@@ -136,15 +137,26 @@ def _current_plan(inputs: Inputs, cfg) -> list[PlanItem]:
 
 
 # -------------------------------------------------------------- decisions ----
-ACTIONS = {"move", "send_to_vendor", "bring_to_shop", "reset_to_oldest_first", "use_suggested"}
+ACTIONS = {"move", "send_to_vendor", "bring_to_shop", "hold", "reset_to_oldest_first", "use_suggested"}
+GOALS = ("savings", "readiness")
+
+
+def _deferred(plan: list[PlanItem]) -> set[str]:
+    return {p.work_order_id for p in plan if p.assignment == HOLD}
 
 
 def _apply(plan: list[PlanItem], inputs: Inputs, action: str,
-           work_order_id: str | None, to_position: int | None, cfg=None) -> tuple[list[PlanItem], dict]:
+           work_order_id: str | None, to_position: int | None, cfg=None,
+           goal: str | None = None) -> tuple[list[PlanItem], dict]:
+    cfg = cfg or load_config()
     if action == "reset_to_oldest_first":
         return planner.oldest_first_plan(inputs), {}
     if action == "use_suggested":
-        return planner.short_first_plan(plan, inputs, cfg or load_config()), {"rule": "short classes first, oldest first"}
+        goal = goal or "savings"
+        if goal not in GOALS:
+            raise ValueError(f"Unknown goal {goal!r}")
+        # keeps the manager's "send next week" choices; rebuilds everything else
+        return _optimized_plan(inputs, cfg, goal, _deferred(plan)), {"goal": goal}
 
     idx = next((i for i, p in enumerate(plan) if p.work_order_id == work_order_id), None)
     if idx is None:
@@ -169,18 +181,20 @@ def _apply(plan: list[PlanItem], inputs: Inputs, action: str,
         plan.insert(anchor, item)
         return plan, {"from": frm, "to": to}
 
-    target = {"send_to_vendor": VENDOR, "bring_to_shop": SHOP}[action]
+    target = {"send_to_vendor": VENDOR, "bring_to_shop": SHOP, "hold": HOLD}[action]
     if item.assignment == target:
         raise ValueError(f"{work_order_id} is already assigned to {target}")
     if target == SHOP and not inputs.jobs[work_order_id].in_house:
         raise ValueError(f"{work_order_id} is vendor-only and can't go to the shop")
+    if target == HOLD and inputs.jobs[work_order_id].in_house:
+        raise ValueError(f"{work_order_id} can be repaired in house; only vendor-only jobs can be sent next week")
     detail = {"from": item.assignment, "to": target}
     item.assignment = target
     return plan, detail
 
 
 def decide(action: str, made_by: str, work_order_id: str | None = None,
-           to_position: int | None = None) -> dict:
+           to_position: int | None = None, goal: str | None = None) -> dict:
     if action not in ACTIONS:
         raise ValueError(f"Unknown action {action!r}")
     cfg, inputs = load_config(), load_inputs()
@@ -188,11 +202,36 @@ def decide(action: str, made_by: str, work_order_id: str | None = None,
     with _lock:                                   # one decision at a time in this process
         plan = _current_plan(inputs, cfg)
         before = planner.simulate(plan, inputs, cfg).costs.total
-        new_plan, detail = _apply(plan, inputs, action, work_order_id, to_position, cfg)
+        new_plan, detail = _apply(plan, inputs, action, work_order_id, to_position, cfg, goal)
         after = planner.simulate(new_plan, inputs, cfg).costs.total
         db.save(cfg.planning_week.start, _to_rows(new_plan), [store.Decision(
             action, made_by, work_order_id, detail, round(before, 2), round(after, 2))])
     return get_week()
+
+
+# --------------------------------------------------------------- optimize ----
+_opt_cache: dict = {}
+
+
+def _optimized_plan(inputs: Inputs, cfg, goal: str, deferred: set[str]) -> list[PlanItem]:
+    key = (id(inputs), cfg.model_dump_json(), goal, frozenset(deferred))
+    if key not in _opt_cache:
+        if len(_opt_cache) > 32:
+            _opt_cache.clear()
+        _opt_cache[key] = planner.optimize(inputs, cfg, goal, deferred)
+    return [PlanItem(p.work_order_id, p.assignment) for p in _opt_cache[key]]
+
+
+def _optimize_previews(plan: list[PlanItem], inputs: Inputs, cfg) -> dict:
+    """What each optimize goal would give, keeping the current "send next week" choices."""
+    out = {}
+    for goal in GOALS:
+        w = planner.simulate(_optimized_plan(inputs, cfg, goal, _deferred(plan)), inputs, cfg)
+        out[goal] = {"total": round(w.costs.total, 2), "lost_revenue": round(w.costs.lost_revenue, 2),
+                     "budget_left": round(w.costs.budget_left, 2),
+                     "car_days_short": sum(c.short for c in w.shortages),
+                     "vendor_sends": sum(1 for v in w.vendor if v.in_house)}
+    return out
 
 
 # ------------------------------------------------------------------- view ----
@@ -200,8 +239,9 @@ def _previews(plan: list[PlanItem], inputs: Inputs, cfg, current_total: float) -
     """For each job, what each alternative assignment would do to the week."""
     out = {}
     for i, p in enumerate(plan):
-        options = [a for a in (SHOP, VENDOR)
-                   if a != p.assignment and (a != SHOP or inputs.jobs[p.work_order_id].in_house)]
+        in_house = inputs.jobs[p.work_order_id].in_house
+        options = [a for a in (SHOP, VENDOR, HOLD)
+                   if a != p.assignment and (a != SHOP or in_house) and (a != HOLD or not in_house)]
         out[p.work_order_id] = {}
         for a in options:
             trial = plan[:i] + [PlanItem(p.work_order_id, a)] + plan[i + 1:]
@@ -221,7 +261,7 @@ def get_week() -> dict:
         "week": week.to_dict(),
         "baseline_total": round(baseline, 2),
         "short_classes": sorted(planner.short_classes(inputs, cfg)),   # short before any repairs
-        "suggested_total": round(planner.simulate(planner.short_first_plan(plan, inputs, cfg), inputs, cfg).costs.total, 2),
+        "optimize": _optimize_previews(plan, inputs, cfg),
         "previews": _previews(plan, inputs, cfg, week.costs.total),
         "jobs": {k: {"vehicle_id": j.vehicle_id, "in_house": j.in_house,
                      "vendor_price": j.vendor_price, "vendor_days": j.vendor_days}

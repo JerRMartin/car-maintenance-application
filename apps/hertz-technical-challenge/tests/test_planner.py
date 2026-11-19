@@ -10,7 +10,7 @@ from pathlib import Path
 
 from backend.config import load_config
 from backend.planner import (HOLD, SHOP, VENDOR, PlanItem, build_inputs,
-                             oldest_first_plan, short_classes, short_first_plan, simulate)
+                             oldest_first_plan, optimize, short_classes, short_first_plan, simulate)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "silver"
 
@@ -100,6 +100,17 @@ class PlanRules(unittest.TestCase):
         plan = [PlanItem(p.work_order_id, VENDOR) if p.work_order_id == "WO-036" else p for p in plan]
         new = {p.work_order_id: p.assignment for p in short_first_plan(plan, self.inputs, self.cfg)}
         self.assertEqual(new["WO-036"], VENDOR)
+
+    def _optimized(self, goal, defer):
+        deferred = {j.work_order_id for j in self.inputs.jobs.values() if not j.in_house} if defer else set()
+        week = simulate(optimize(self.inputs, self.cfg, goal, deferred), self.inputs, self.cfg)
+        return round(week.costs.total), sum(c.short for c in week.shortages)
+
+    def test_optimize_matches_notebook_four_options(self):
+        self.assertEqual(self._optimized("savings", defer=True), (14962, 28))     # 1a
+        self.assertEqual(self._optimized("savings", defer=False), (23742, 28))    # 1b
+        self.assertEqual(self._optimized("readiness", defer=True), (20852, 6))    # 2a
+        self.assertEqual(self._optimized("readiness", defer=False), (27818, 9))   # 2b
 
     def test_vendor_only_job_cannot_go_to_shop(self):
         plan = oldest_first_plan(self.inputs)

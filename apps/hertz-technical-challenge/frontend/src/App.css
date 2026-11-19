@@ -757,3 +757,71 @@ section:first-of-type {
 .btn-danger:hover:not(:disabled) {
   background: #333;
 }
+
+/* ---------------------------------------------------- optimize split btn */
+.split {
+  position: relative;
+  display: inline-flex;
+}
+.split-main {
+  border-radius: 999px 0 0 999px;
+  padding-right: 18px;
+}
+.split-arrow {
+  border-radius: 0 999px 999px 0;
+  padding: 10px 14px;
+  border-left: 1px solid rgba(0, 0, 0, 0.18);
+}
+.split-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 50;
+  width: 340px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.split-item {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: #fff;
+  text-align: left;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-weight: 400;
+}
+.split-item:hover:not(:disabled) {
+  background: var(--yellow-soft);
+}
+.split-item.active {
+  border-color: var(--yellow-border);
+  background: var(--yellow-soft);
+}
+.split-title {
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.split-numbers {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.warn-line {
+  background: var(--warn-bg);
+  border: 1px solid var(--yellow-border);
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+table.mini td {
+  padding: 4px 8px 4px 0;
+  border: none;
+}

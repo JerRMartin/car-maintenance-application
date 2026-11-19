@@ -59,6 +59,14 @@ interface Decision {
   week_cost_before: number | null
   week_cost_after: number | null
 }
+type Goal = 'savings' | 'readiness'
+interface OptionPreview {
+  total: number
+  lost_revenue: number
+  budget_left: number
+  car_days_short: number
+  vendor_sends: number
+}
 interface WeekResponse {
   week: {
     shop_queue: ShopRow[]
@@ -71,7 +79,7 @@ interface WeekResponse {
     hours_per_day: number
   }
   baseline_total: number
-  suggested_total: number
+  optimize: Record<Goal, OptionPreview>
   short_classes: string[]
   previews: Record<string, Partial<Record<Assignment, Preview>>>
   jobs: Record<string, { vehicle_id: string; in_house: boolean; vendor_price: number; vendor_days: number }>
@@ -92,6 +100,16 @@ const parseDay = (iso: string) => {
 }
 const day = (iso: string | null) =>
   iso ? parseDay(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }) : ''
+const addDays = (iso: string, n: number) => {
+  const d = parseDay(iso)
+  d.setDate(d.getDate() + n)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+const GOAL_LABEL: Record<Goal, string> = { savings: 'Savings', readiness: 'Car readiness' }
+const GOAL_HELP: Record<Goal, string> = {
+  savings: 'Lowest cost of the week',
+  readiness: 'Fewest cars short within the vendor budget',
+}
 const className = (c: string) =>
   c.replace(/\b\w/g, (ch) => ch.toUpperCase()).replace('Suv', 'SUV')
 const jobName = (j: string) => j.replace(/\b\w/g, (ch) => ch.toUpperCase()).replace('Ac ', 'AC ')
@@ -100,8 +118,8 @@ const ACTION_LABEL: Record<string, string> = {
   move: 'Moved in queue',
   send_to_vendor: 'Sent to vendor',
   bring_to_shop: 'Brought back to shop',
-  hold: 'Put on hold',
-  use_suggested: 'Used suggested order',
+  hold: 'Moved to next week',
+  use_suggested: 'Optimized plan',
   reset_to_oldest_first: 'Reset to oldest first',
   start_plan: 'Week started (oldest first)',
   job_added: 'New work order added',
@@ -115,6 +133,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const page = usePage()
   const [confirmReset, setConfirmReset] = useState(false)
+  const [deferRow, setDeferRow] = useState<VendorRow | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -131,13 +150,13 @@ export default function App() {
     load()
   }, [load])
 
-  const decide = async (action: string, work_order_id?: string, to_position?: number) => {
+  const decide = async (action: string, work_order_id?: string, to_position?: number, goal?: Goal) => {
     setBusy(true)
     try {
       const r = await fetch('/api/decisions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, work_order_id, to_position }),
+        body: JSON.stringify({ action, work_order_id, to_position, goal }),
       })
       if (!r.ok) throw new Error((await r.json()).detail ?? r.statusText)
       setData(await r.json())
@@ -167,7 +186,7 @@ export default function App() {
   const meta = PAGES.find((p) => p.id === page) ?? PAGES[0]
   const counts: Partial<Record<Page, number>> = {
     queue: week.shop_queue.length,
-    vendor: week.vendor.length,
+    vendor: week.vendor.length + week.held.length,
     log: decisions.length,
   }
 
@@ -182,17 +201,12 @@ export default function App() {
             <p className="muted">{meta.subtitle}</p>
           </div>
           <div className="top-actions">
-            <button
-              className="btn-primary"
-              disabled={busy}
-              title={`Short classes first, oldest first within each group. Keeps vendor choices.
-Week cost: ${money(
-                week.costs.total,
-              )} → ${money(data.suggested_total)} (${signed(data.suggested_total - week.costs.total)})`}
-              onClick={() => decide('use_suggested')}
-            >
-              Use suggested order
-            </button>
+            <OptimizeButton
+              busy={busy}
+              current={week.costs.total}
+              options={data.optimize}
+              onRun={(goal) => decide('use_suggested', undefined, undefined, goal)}
+            />
             <button className="btn-outline" disabled={busy} onClick={() => setConfirmReset(true)}>
               Reset to oldest first
             </button>
@@ -262,8 +276,22 @@ Week cost: ${money(
               <CostCards costs={week.costs} baseline={data.baseline_total} />
             </section>
             <section>
-              <VendorList rows={week.vendor} previews={previews} costs={week.costs} busy={busy} decide={decide} />
+              <VendorList rows={week.vendor} previews={previews} costs={week.costs} busy={busy} decide={decide} onDefer={setDeferRow} />
             </section>
+            {week.held.length > 0 && (
+              <section>
+                <SectionTitle title="Next week" subtitle="Vendor-only jobs moved to next week: not paid or returned this week." />
+                <NextWeekList
+                  rows={week.held}
+                  jobs={data.jobs}
+                  sendDay={days[0]}
+                  previews={previews}
+                  costs={week.costs}
+                  busy={busy}
+                  decide={decide}
+                />
+              </section>
+            )}
           </>
         )}
 
@@ -273,6 +301,46 @@ Week cost: ${money(
           </section>
         )}
       </main>
+      {deferRow && (
+        <ConfirmDialog
+          title={`Send ${deferRow.work_order_id} next week?`}
+          confirmLabel="Send next week"
+          onCancel={() => setDeferRow(null)}
+          onConfirm={() => {
+            const wo = deferRow.work_order_id
+            setDeferRow(null)
+            decide('hold', wo)
+          }}
+        >
+          <p className="warn-line">
+            ⚠ {jobName(deferRow.job_type)} takes <strong>{data.jobs[deferRow.work_order_id]?.vendor_days} days</strong> at the
+            vendor. Sending it next week delays this car by a week.
+          </p>
+          <table className="mini">
+            <tbody>
+              <tr>
+                <td>Sent this week ({day(deferRow.sent_date)})</td>
+                <td>
+                  back <strong>{day(deferRow.ready_date)}</strong>
+                </td>
+              </tr>
+              <tr>
+                <td>Sent next week ({day(addDays(deferRow.sent_date, 7))})</td>
+                <td>
+                  back <strong>{day(addDays(deferRow.ready_date, 7))}</strong>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          {previews[deferRow.work_order_id]?.hold && (
+            <p>
+              This week's cost: {signed(previews[deferRow.work_order_id]!.hold!.total_change)} (the{' '}
+              {money(deferRow.vendor_price)} moves to next week). Vendor budget left this week:{' '}
+              {money(previews[deferRow.work_order_id]!.hold!.budget_left)}.
+            </p>
+          )}
+        </ConfirmDialog>
+      )}
       {confirmReset && (
         <ConfirmDialog
           title="Reset to oldest first?"
@@ -638,12 +706,13 @@ function ShortageGrid({ cells, days }: { cells: ShortageCell[]; days: string[] }
   )
 }
 
-type Decide = (action: string, work_order_id?: string, to_position?: number) => void
+type Decide = (action: string, work_order_id?: string, to_position?: number, goal?: Goal) => void
 
-const PREVIEW_KEY: Record<string, Assignment> = { send_to_vendor: 'vendor', bring_to_shop: 'shop' }
+const PREVIEW_KEY: Record<string, Assignment> = { send_to_vendor: 'vendor', bring_to_shop: 'shop', hold: 'hold' }
 const ACTION_TEXT: Record<string, string> = {
   send_to_vendor: 'Send %s to the vendor',
   bring_to_shop: 'Repair %s in house',
+  hold: 'Send %s to the vendor next week',
 }
 const budgetText = (n: number) => (n < 0 ? `over budget by ${money(n)}` : money(n))
 
@@ -1154,12 +1223,14 @@ function VendorList({
   costs,
   busy,
   decide,
+  onDefer,
 }: {
   rows: VendorRow[]
   previews: WeekResponse['previews']
   costs: Costs
   busy: boolean
   decide: Decide
+  onDefer: (row: VendorRow) => void
 }) {
   if (!rows.length) return <p className="muted">No jobs sent to the vendor.</p>
   return (
@@ -1192,13 +1263,158 @@ function VendorList({
                     Repair in house
                   </button>
                 ) : (
-                  <span className="muted">Vendor only</span>
+                  <button disabled={busy} title={impactText('hold', r.work_order_id, previews, costs)} onClick={() => onDefer(r)}>
+                    Send next week
+                  </button>
                 )}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+function NextWeekList({
+  rows,
+  jobs,
+  sendDay,
+  previews,
+  costs,
+  busy,
+  decide,
+}: {
+  rows: HoldRow[]
+  jobs: WeekResponse['jobs']
+  sendDay: string
+  previews: WeekResponse['previews']
+  costs: Costs
+  busy: boolean
+  decide: Decide
+}) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Class</th>
+            <th>Job</th>
+            <th className="num">Price</th>
+            <th className="num">Vendor days</th>
+            <th>Back if sent this week</th>
+            <th>Back if sent next week</th>
+            <th>Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const j = jobs[r.work_order_id]
+            return (
+              <tr key={r.work_order_id}>
+                <td className="mono">{r.work_order_id}</td>
+                <td>{className(r.vehicle_class)}</td>
+                <td>{jobName(r.job_type)}</td>
+                <td className="num">{money(j?.vendor_price ?? 0)}</td>
+                <td className="num">{j?.vendor_days}</td>
+                <td>{day(addDays(sendDay, j?.vendor_days ?? 0))}</td>
+                <td>
+                  <strong>{day(addDays(sendDay, 7 + (j?.vendor_days ?? 0)))}</strong>
+                </td>
+                <td>
+                  <button
+                    disabled={busy}
+                    title={impactText('send_to_vendor', r.work_order_id, previews, costs)}
+                    onClick={() => decide('send_to_vendor', r.work_order_id)}
+                  >
+                    Send this week
+                  </button>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// Split button: the main part runs the selected goal (Savings by default); the arrow opens the choices.
+function OptimizeButton({
+  busy,
+  current,
+  options,
+  onRun,
+}: {
+  busy: boolean
+  current: number
+  options: Record<Goal, OptionPreview>
+  onRun: (goal: Goal) => void
+}) {
+  const [goal, setGoal] = useState<Goal>('savings')
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false)
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    window.addEventListener('mousedown', close)
+    window.addEventListener('keydown', esc)
+    return () => {
+      window.removeEventListener('mousedown', close)
+      window.removeEventListener('keydown', esc)
+    }
+  }, [open])
+  const o = options[goal]
+  return (
+    <div className="split" ref={ref}>
+      <button
+        className="btn-primary split-main"
+        disabled={busy}
+        title={`${GOAL_HELP[goal]}. Week cost ${money(current)} → ${money(o.total)}, ${o.car_days_short} car-days short.`}
+        onClick={() => onRun(goal)}
+      >
+        Optimize: {GOAL_LABEL[goal]}
+      </button>
+      <button
+        className="btn-primary split-arrow"
+        disabled={busy}
+        aria-label="Choose what to optimize for"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        ▾
+      </button>
+      {open && (
+        <div className="split-menu" role="menu">
+          {(['savings', 'readiness'] as Goal[]).map((g) => {
+            const p = options[g]
+            return (
+              <button
+                key={g}
+                role="menuitem"
+                className={g === goal ? 'split-item active' : 'split-item'}
+                onClick={() => {
+                  setGoal(g)
+                  setOpen(false)
+                  onRun(g)
+                }}
+              >
+                <span className="split-title">
+                  {GOAL_LABEL[g]}
+                  {g === 'savings' && <span className="tag">default</span>}
+                </span>
+                <span className="muted">{GOAL_HELP[g]}</span>
+                <span className="split-numbers">
+                  Week cost {money(p.total)} ({signed(p.total - current)}) · {p.car_days_short} car-days short ·{' '}
+                  {money(p.budget_left)} budget left
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -1232,7 +1448,11 @@ function DecisionLog({ decisions }: { decisions: Decision[] }) {
                 <td>{ACTION_LABEL[d.action] ?? d.action}</td>
                 <td className="mono">{d.work_order_id ?? ''}</td>
                 <td className="muted">
-                  {d.detail && 'from' in d.detail ? `${String(d.detail.from)} → ${String(d.detail.to)}` : ''}
+                  {d.detail && 'from' in d.detail
+                    ? `${String(d.detail.from).replace('hold', 'next week')} → ${String(d.detail.to).replace('hold', 'next week')}`
+                    : d.detail && 'goal' in d.detail
+                      ? GOAL_LABEL[d.detail.goal as Goal] ?? String(d.detail.goal)
+                      : ''}
                 </td>
                 <td className="num">{d.week_cost_after != null ? money(Number(d.week_cost_after)) : ''}</td>
                 <td className={change == null ? 'num' : change < 0 ? 'num good' : change > 0 ? 'num bad' : 'num'}>
