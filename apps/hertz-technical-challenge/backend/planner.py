@@ -172,7 +172,10 @@ def validate_plan(plan: list[PlanItem], inputs: Inputs) -> None:
         seen.add(item.work_order_id)
 
 
-def simulate(plan: list[PlanItem], inputs: Inputs, cfg: PlanningConfig) -> Week:
+def simulate(plan: list[PlanItem], inputs: Inputs, cfg: PlanningConfig, split_jobs: bool = True) -> Week:
+    """split_jobs=True: a job can carry over to the next day (assumption A).
+    split_jobs=False: a job that doesn't fit in what's left of today starts tomorrow instead;
+    the leftover hours are idle. (A job longer than a whole day still has to span days.)"""
     validate_plan(plan, inputs)
     days = _week_days(cfg)
     shop_days = [d for d in days if _day_name(d) in cfg.shop.open_days]
@@ -187,6 +190,10 @@ def simulate(plan: list[PlanItem], inputs: Inputs, cfg: PlanningConfig) -> Week:
         remaining, start, finish = job.shop_hours, None, None
         segments: list[DaySegment] = []
         while remaining > EPS and day_i < len(shop_days):
+            if (not split_jobs and remaining > hours_left + EPS
+                    and hours_left < hours_per_day - EPS):     # doesn't fit today: start tomorrow
+                day_i, hours_left = day_i + 1, hours_per_day
+                continue
             start = start or shop_days[day_i]
             work = min(remaining, hours_left)
             segments.append(DaySegment(shop_days[day_i], work))
@@ -248,6 +255,23 @@ def oldest_first_plan(inputs: Inputs) -> list[PlanItem]:
     """Today's practice: shop works oldest first; vendor-only jobs go to the vendor."""
     jobs = sorted(inputs.jobs.values(), key=lambda j: (j.opened_ts, j.work_order_id))
     return [PlanItem(j.work_order_id, SHOP if j.in_house else VENDOR) for j in jobs]
+
+
+def short_classes(inputs: Inputs, cfg: PlanningConfig) -> set[str]:
+    """Classes where reservations exceed cars ready on any day of the plan week."""
+    start, end = cfg.planning_week.start, cfg.planning_week.end
+    return {d.vehicle_class for d in inputs.demand
+            if start <= d.date <= end and d.reservations > d.cars_ready}
+
+
+def short_first_plan(plan: list[PlanItem], inputs: Inputs, cfg: PlanningConfig) -> list[PlanItem]:
+    """Suggested order: jobs for short classes first, then the rest; oldest first within each.
+    Only reorders: each job keeps its current shop/vendor assignment."""
+    short = short_classes(inputs, cfg)
+    def key(p: PlanItem):
+        j = inputs.jobs[p.work_order_id]
+        return (j.vehicle_class not in short, j.opened_ts, j.work_order_id)
+    return [PlanItem(p.work_order_id, p.assignment) for p in sorted(plan, key=key)]
 
 
 # --------------------------------------------------------------- loading ----

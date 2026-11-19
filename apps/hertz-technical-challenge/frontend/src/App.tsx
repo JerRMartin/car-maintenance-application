@@ -71,6 +71,7 @@ interface WeekResponse {
     hours_per_day: number
   }
   baseline_total: number
+  suggested_total: number
   previews: Record<string, Partial<Record<Assignment, Preview>>>
   jobs: Record<string, { vehicle_id: string; in_house: boolean; vendor_price: number; vendor_days: number }>
   decisions: Decision[]
@@ -179,7 +180,15 @@ export default function App() {
             <p className="muted">{meta.subtitle}</p>
           </div>
           <div className="top-actions">
-            <button className="btn-primary" disabled title="Coming next: we're agreeing the ranking rule first">
+            <button
+              className="btn-primary"
+              disabled={busy}
+              title={`Short classes first, oldest first within each group. Keeps vendor choices.
+Week cost: ${money(
+                week.costs.total,
+              )} → ${money(data.suggested_total)} (${signed(data.suggested_total - week.costs.total)})`}
+              onClick={() => decide('use_suggested')}
+            >
               Use suggested order
             </button>
             <button className="btn-outline" disabled={busy} onClick={() => setConfirmReset(true)}>

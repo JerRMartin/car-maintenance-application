@@ -136,13 +136,15 @@ def _current_plan(inputs: Inputs, cfg) -> list[PlanItem]:
 
 
 # -------------------------------------------------------------- decisions ----
-ACTIONS = {"move", "send_to_vendor", "bring_to_shop", "reset_to_oldest_first"}
+ACTIONS = {"move", "send_to_vendor", "bring_to_shop", "reset_to_oldest_first", "use_suggested"}
 
 
 def _apply(plan: list[PlanItem], inputs: Inputs, action: str,
-           work_order_id: str | None, to_position: int | None) -> tuple[list[PlanItem], dict]:
+           work_order_id: str | None, to_position: int | None, cfg=None) -> tuple[list[PlanItem], dict]:
     if action == "reset_to_oldest_first":
         return planner.oldest_first_plan(inputs), {}
+    if action == "use_suggested":
+        return planner.short_first_plan(plan, inputs, cfg or load_config()), {"rule": "short classes first, oldest first"}
 
     idx = next((i for i, p in enumerate(plan) if p.work_order_id == work_order_id), None)
     if idx is None:
@@ -186,7 +188,7 @@ def decide(action: str, made_by: str, work_order_id: str | None = None,
     with _lock:                                   # one decision at a time in this process
         plan = _current_plan(inputs, cfg)
         before = planner.simulate(plan, inputs, cfg).costs.total
-        new_plan, detail = _apply(plan, inputs, action, work_order_id, to_position)
+        new_plan, detail = _apply(plan, inputs, action, work_order_id, to_position, cfg)
         after = planner.simulate(new_plan, inputs, cfg).costs.total
         db.save(cfg.planning_week.start, _to_rows(new_plan), [store.Decision(
             action, made_by, work_order_id, detail, round(before, 2), round(after, 2))])
@@ -218,6 +220,7 @@ def get_week() -> dict:
     return {
         "week": week.to_dict(),
         "baseline_total": round(baseline, 2),
+        "suggested_total": round(planner.simulate(planner.short_first_plan(plan, inputs, cfg), inputs, cfg).costs.total, 2),
         "previews": _previews(plan, inputs, cfg, week.costs.total),
         "jobs": {k: {"vehicle_id": j.vehicle_id, "in_house": j.in_house,
                      "vendor_price": j.vendor_price, "vendor_days": j.vendor_days}
