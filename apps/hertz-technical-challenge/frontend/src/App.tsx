@@ -791,6 +791,9 @@ function DayBoard({ rows, costs, busy, decide, jobs, shortClasses, previews, sho
 
   const [dragging, setDragging] = useState<ShopRow | null>(null)
   const [dropAt, setDropAt] = useState<{ col: string; position: number; after: boolean } | null>(null)
+  const [showAllLater, setShowAllLater] = useState(false)
+  const LATER_PREVIEW = 6
+  const weekday = (iso: string | null) => (iso ? parseDay(iso).toLocaleDateString('en-US', { weekday: 'short' }) : '')
   const endDrag = () => {
     setDragging(null)
     setDropAt(null)
@@ -841,14 +844,28 @@ function DayBoard({ rows, costs, busy, decide, jobs, shortClasses, previews, sho
           )}
         </div>
         <div className="day-cards">
-          {cards.map((c) => {
+          {(isLater && !showAllLater ? cards.slice(0, LATER_PREVIEW) : cards).map((c) => {
             const r = c.row
             const marker =
               dropAt?.col === key && dropAt.position === r.position ? (dropAt.after ? 'drop-after' : 'drop-before') : ''
+            const split = c.continued || c.continues
+            const readyText = isLater
+              ? ''
+              : c.continues
+                ? r.ready_date
+                  ? `→ ${weekday(r.ready_date)}`
+                  : '→ next wk'
+                : `→ ${weekday(r.ready_date)}`
             return (
               <div
                 key={`${r.work_order_id}-${key}`}
-                className={['job-card', dragging?.work_order_id === r.work_order_id ? 'dragging' : '', marker].join(' ')}
+                className={[
+                  'job-card',
+                  shortClasses.has(r.vehicle_class) ? 'is-short' : '',
+                  split ? 'split-job' : '',
+                  dragging?.work_order_id === r.work_order_id ? 'dragging' : '',
+                  marker,
+                ].join(' ')}
                 draggable={!busy}
                 onDragStart={(e) => {
                   e.dataTransfer.effectAllowed = 'move'
@@ -865,29 +882,21 @@ function DayBoard({ rows, costs, busy, decide, jobs, shortClasses, previews, sho
                     setDropAt({ col: key, position: r.position, after })
                 }}
                 onDragEnd={endDrag}
-                title={`#${r.position} in the queue · drag to another day to reschedule`}
+                title={`#${r.position} in the queue · ${className(r.vehicle_class)} · ${jobName(r.job_type)}${
+                  r.ready_date ? ` · ready ${day(r.ready_date)}` : ''
+                } · drag to another day to reschedule`}
               >
-                <div className="card-top">
+                <div className="card-line1">
                   <span className="mono">{r.work_order_id}</span>
-                  <span className="muted">#{r.position}</span>
+                  <span className="card-cls">{className(r.vehicle_class)}</span>
+                  <span className="card-pos">#{r.position}</span>
                 </div>
-                <div className="card-class">
-                  {className(r.vehicle_class)}
-                  {shortClasses.has(r.vehicle_class) && <span className="tag short-tag" title="Reservations exceed cars ready on at least one day of the plan week">short</span>}
-                </div>
-                <div className="card-job">
-                  {jobName(r.job_type)} ·{' '}
-                  {c.hours === r.shop_hours ? `${r.shop_hours} h` : `${+c.hours.toFixed(2)} of ${r.shop_hours} h`}
-                </div>
-                <div className="card-foot">
-                  {c.continued && <span className="muted">← continued from earlier</span>}
-                  {c.continues ? (
-                    <span className="muted">{r.ready_date ? 'continues →' : 'continues next week'}</span>
-                  ) : isLater ? (
-                    <span className="muted">Not this week</span>
-                  ) : (
-                    <span className="ready">Ready {day(r.ready_date)}</span>
-                  )}
+                <div className="card-line2">
+                  <span className="card-job-name">{jobName(r.job_type)}</span>
+                  <span className="card-hours">
+                    {c.hours === r.shop_hours ? `${r.shop_hours}h` : `${+c.hours.toFixed(2)}/${r.shop_hours}h`}
+                  </span>
+                  {readyText && <span className={c.continues ? 'card-ready muted' : 'card-ready'}>{readyText}</span>}
                 </div>
                 {!c.continued && (
                   <button
@@ -902,6 +911,11 @@ function DayBoard({ rows, costs, busy, decide, jobs, shortClasses, previews, sho
               </div>
             )
           })}
+          {isLater && cards.length > LATER_PREVIEW && (
+            <button className="link show-more" onClick={() => setShowAllLater(!showAllLater)}>
+              {showAllLater ? 'Show fewer' : `Show all ${cards.length}`}
+            </button>
+          )}
         </div>
       </div>
     )
@@ -910,8 +924,8 @@ function DayBoard({ rows, costs, busy, decide, jobs, shortClasses, previews, sho
   return (
     <>
       <p className="muted board-hint">
-        Each day's {hoursPerDay} tech hours are filled in queue order. Drag a job to another day to reschedule it; the jobs
-        after it shift.
+        Each day's {hoursPerDay} tech hours are filled in queue order. Drag a job to another day to reschedule it.{' '}
+        <span className="legend-short">Red edge</span> = class short this week. Hover a card to send it to the vendor.
       </p>
       <div className="board">
         {columns.byDay.map((c) => renderColumn(c.key, day(c.key), c.cards))}
