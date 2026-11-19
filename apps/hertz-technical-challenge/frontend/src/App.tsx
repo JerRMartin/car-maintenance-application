@@ -198,7 +198,7 @@ export default function App() {
         {page === 'summary' && (
           <>
             <section>
-              <SectionTitle title="Cost of the week" subtitle="Shop + vendor + lost revenue, Monday to Sunday." badge={weekLabel} />
+              <SectionTitle title="Cost of the week" subtitle="Shop + vendor + lost revenue for the plan week." badge={weekLabel} />
               <CostCards costs={week.costs} baseline={data.baseline_total} />
               <p className="muted assumptions">
                 Shop: {data.config.shop.tech_hours_per_day} tech hrs/day, {data.config.shop.open_days.join('–')} · $
