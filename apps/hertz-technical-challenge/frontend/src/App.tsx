@@ -276,37 +276,17 @@ export default function App() {
             <section>
               <CostCards costs={week.costs} baseline={data.baseline_total} />
             </section>
-            <section>
-              <SectionTitle
-                title="Vendor-only repairs"
-                subtitle="Jobs the shop can't do. Choose which go out this week; the rest wait for next week."
-              />
-              <VendorOnlyTable
-                sent={week.vendor.filter((v) => !v.in_house)}
-                notSent={week.held}
-                jobs={data.jobs}
-                sendDay={days[0]}
-                previews={previews}
-                costs={week.costs}
-                busy={busy}
-                decide={decide}
-                onDefer={setDeferRow}
-              />
-            </section>
-            <section>
-              <SectionTitle
-                title="Send-to-vendor queue"
-                subtitle="Jobs the shop could do, sent out instead to get the car back sooner."
-              />
-              <OutsourcedTable
-                rows={week.vendor.filter((v) => v.in_house)}
-                jobs={data.jobs}
-                previews={previews}
-                costs={week.costs}
-                busy={busy}
-                decide={decide}
-              />
-            </section>
+            <VendorBoard
+              vendor={week.vendor}
+              notSent={week.held}
+              jobs={data.jobs}
+              sendDay={days[0]}
+              previews={previews}
+              costs={week.costs}
+              busy={busy}
+              decide={decide}
+              onDefer={setDeferRow}
+            />
           </>
         )}
 
@@ -1230,8 +1210,10 @@ function ShopQueue({
   )
 }
 
-function VendorOnlyTable({
-  sent,
+// Two tables: vendor-only repairs not sent yet, and everything going to the vendor this week.
+// Drag a vendor-only job down to send it this week, or back up to not send it (with the warning).
+function VendorBoard({
+  vendor,
   notSent,
   jobs,
   sendDay,
@@ -1241,7 +1223,7 @@ function VendorOnlyTable({
   decide,
   onDefer,
 }: {
-  sent: VendorRow[]
+  vendor: VendorRow[]
   notSent: HoldRow[]
   jobs: WeekResponse['jobs']
   sendDay: string
@@ -1251,145 +1233,183 @@ function VendorOnlyTable({
   decide: Decide
   onDefer: (row: VendorRow) => void
 }) {
-  if (!sent.length && !notSent.length) return <p className="muted">No vendor-only repairs.</p>
+  const [drag, setDrag] = useState<{ wo: string; from: 'waiting' | 'queue' } | null>(null)
+  const [over, setOver] = useState<'waiting' | 'queue' | null>(null)
   const nextSend = addDays(sendDay, 7)
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Order</th>
-            <th>Class</th>
-            <th>Job</th>
-            <th className="num">Price</th>
-            <th className="num">Turnaround</th>
-            <th>Status</th>
-            <th>Send date</th>
-            <th>Ready to rent</th>
-            <th>Change</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sent.map((r) => (
-            <tr key={r.work_order_id}>
-              <td className="mono">{r.work_order_id}</td>
-              <td>{className(r.vehicle_class)}</td>
-              <td>{jobName(r.job_type)}</td>
-              <td className="num">{money(r.vendor_price)}</td>
-              <td className="num">{daysText(jobs[r.work_order_id]?.vendor_days ?? 0)}</td>
-              <td>
-                <span className="status sent">Sending this week</span>
-              </td>
-              <td>{day(r.sent_date)}</td>
-              <td>{day(r.ready_date)}</td>
-              <td>
-                <button disabled={busy} title={impactText('hold', r.work_order_id, previews, costs)} onClick={() => onDefer(r)}>
-                  Don't send
-                </button>
-              </td>
-            </tr>
-          ))}
-          {notSent.map((r) => {
-            const j = jobs[r.work_order_id]
-            const vd = j?.vendor_days ?? 0
-            return (
-              <tr key={r.work_order_id} className="later">
-                <td className="mono">{r.work_order_id}</td>
-                <td>{className(r.vehicle_class)}</td>
-                <td>{jobName(r.job_type)}</td>
-                <td className="num">{money(j?.vendor_price ?? 0)}</td>
-                <td className="num">{daysText(vd)}</td>
-                <td>
-                  <span className="status">Not sent</span>
-                </td>
-                <td>
-                  Next: {day(nextSend)}
-                  <span className="sub">this week: {day(sendDay)}</span>
-                </td>
-                <td>
-                  {day(addDays(nextSend, vd))}
-                  <span className="sub">if sent this week: {day(addDays(sendDay, vd))}</span>
-                </td>
-                <td>
-                  <button
-                    disabled={busy}
-                    title={impactText('send_to_vendor', r.work_order_id, previews, costs)}
-                    onClick={() => decide('send_to_vendor', r.work_order_id)}
-                  >
-                    Send this week
-                  </button>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
-}
 
-function OutsourcedTable({
-  rows,
-  jobs,
-  previews,
-  costs,
-  busy,
-  decide,
-}: {
-  rows: VendorRow[]
-  jobs: WeekResponse['jobs']
-  previews: WeekResponse['previews']
-  costs: Costs
-  busy: boolean
-  decide: Decide
-}) {
-  if (!rows.length)
-    return (
-      <p className="muted">
-        Nothing outsourced. Use “Send to vendor” in the shop queue, or Optimize: Car readiness.
-      </p>
-    )
+  const dragProps = (wo: string, from: 'waiting' | 'queue') => ({
+    draggable: !busy,
+    onDragStart: (e: DragEvent<HTMLTableRowElement>) => {
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', wo)
+      setDrag({ wo, from })
+    },
+    onDragEnd: () => {
+      setDrag(null)
+      setOver(null)
+    },
+  })
+  const dropProps = (target: 'waiting' | 'queue') => ({
+    onDragOver: (e: DragEvent<HTMLDivElement>) => {
+      if (!drag || drag.from === target) return
+      e.preventDefault()
+      if (over !== target) setOver(target)
+    },
+    onDragLeave: () => setOver(null),
+    onDrop: (e: DragEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      if (drag && drag.from !== target) {
+        if (target === 'queue') decide('send_to_vendor', drag.wo)
+        else {
+          const row = vendor.find((v) => v.work_order_id === drag.wo)
+          if (row) onDefer(row)                                  // shows the turnaround warning first
+        }
+      }
+      setDrag(null)
+      setOver(null)
+    },
+  })
+  const zone = (target: 'waiting' | 'queue') =>
+    ['table-wrap', 'drop-zone', drag && drag.from !== target ? 'droppable' : '', over === target ? 'over' : ''].join(' ')
+
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Order</th>
-            <th>Class</th>
-            <th>Job</th>
-            <th className="num">Vendor price</th>
-            <th className="num">Shop cost</th>
-            <th className="num">Turnaround</th>
-            <th>Send date</th>
-            <th>Ready to rent</th>
-            <th>Change</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.work_order_id}>
-              <td className="mono">{r.work_order_id}</td>
-              <td>{className(r.vehicle_class)}</td>
-              <td>{jobName(r.job_type)}</td>
-              <td className="num">{money(r.vendor_price)}</td>
-              <td className="num muted">{money(jobs[r.work_order_id]?.shop_cost ?? 0)}</td>
-              <td className="num">{daysText(jobs[r.work_order_id]?.vendor_days ?? 0)}</td>
-              <td>{day(r.sent_date)}</td>
-              <td>{day(r.ready_date)}</td>
-              <td>
-                <button
-                  disabled={busy}
-                  title={impactText('bring_to_shop', r.work_order_id, previews, costs)}
-                  onClick={() => decide('bring_to_shop', r.work_order_id)}
+    <>
+      <section>
+        <SectionTitle
+          title="Vendor-only repairs"
+          subtitle="Jobs the shop can't do that aren't sent yet. Drag one into the queue below to send it this week."
+        />
+        <div className={zone('waiting')} {...dropProps('waiting')}>
+          <table>
+            <thead>
+              <tr>
+                <th aria-label="Drag" />
+                <th>Order</th>
+                <th>Class</th>
+                <th>Job</th>
+                <th className="num">Price</th>
+                <th className="num">Turnaround</th>
+                <th>Ready if sent this week</th>
+                <th>Ready if sent next week</th>
+                <th>Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {notSent.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="muted empty">
+                    Every vendor-only repair is going out this week.
+                  </td>
+                </tr>
+              )}
+              {notSent.map((r) => {
+                const j = jobs[r.work_order_id]
+                const vd = j?.vendor_days ?? 0
+                return (
+                  <tr key={r.work_order_id} className={drag?.wo === r.work_order_id ? 'dragging' : ''} {...dragProps(r.work_order_id, 'waiting')}>
+                    <td className="grip" aria-hidden>
+                      ⠿
+                    </td>
+                    <td className="mono">{r.work_order_id}</td>
+                    <td>{className(r.vehicle_class)}</td>
+                    <td>{jobName(r.job_type)}</td>
+                    <td className="num">{money(j?.vendor_price ?? 0)}</td>
+                    <td className="num">{daysText(vd)}</td>
+                    <td>
+                      {day(addDays(sendDay, vd))} <span className="sub">sent {day(sendDay)}</span>
+                    </td>
+                    <td>
+                      {day(addDays(nextSend, vd))} <span className="sub">sent {day(nextSend)}</span>
+                    </td>
+                    <td>
+                      <button
+                        disabled={busy}
+                        title={impactText('send_to_vendor', r.work_order_id, previews, costs)}
+                        onClick={() => decide('send_to_vendor', r.work_order_id)}
+                      >
+                        Send this week
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <SectionTitle
+          title="Send-to-vendor queue"
+          subtitle="Everything going to the vendor this week, with its send date and when it's back to rent."
+        />
+        <div className={zone('queue')} {...dropProps('queue')}>
+          <table>
+            <thead>
+              <tr>
+                <th aria-label="Drag" />
+                <th>Order</th>
+                <th>Class</th>
+                <th>Job</th>
+                <th className="num">Vendor price</th>
+                <th className="num">Shop cost</th>
+                <th className="num">Turnaround</th>
+                <th>Send date</th>
+                <th>Ready to rent</th>
+                <th>Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vendor.length === 0 && (
+                <tr>
+                  <td colSpan={10} className="muted empty">
+                    Nothing going to the vendor this week. Drag vendor-only repairs here, use “Send to vendor” in the shop
+                    queue, or Optimize: Car readiness.
+                  </td>
+                </tr>
+              )}
+              {vendor.map((r) => (
+                <tr
+                  key={r.work_order_id}
+                  className={drag?.wo === r.work_order_id ? 'dragging' : ''}
+                  {...(r.in_house ? {} : dragProps(r.work_order_id, 'queue'))}
                 >
-                  Repair in house
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+                  <td className={r.in_house ? 'grip off' : 'grip'} aria-hidden>
+                    ⠿
+                  </td>
+                  <td className="mono">{r.work_order_id}</td>
+                  <td>{className(r.vehicle_class)}</td>
+                  <td>
+                    {jobName(r.job_type)}
+                    <span className="tag">{r.in_house ? 'in-house' : 'vendor-only'}</span>
+                  </td>
+                  <td className="num">{money(r.vendor_price)}</td>
+                  <td className="num muted">{r.in_house ? money(jobs[r.work_order_id]?.shop_cost ?? 0) : '–'}</td>
+                  <td className="num">{daysText(jobs[r.work_order_id]?.vendor_days ?? 0)}</td>
+                  <td>{day(r.sent_date)}</td>
+                  <td>{day(r.ready_date)}</td>
+                  <td>
+                    {r.in_house ? (
+                      <button
+                        disabled={busy}
+                        title={impactText('bring_to_shop', r.work_order_id, previews, costs)}
+                        onClick={() => decide('bring_to_shop', r.work_order_id)}
+                      >
+                        Repair in house
+                      </button>
+                    ) : (
+                      <button disabled={busy} title={impactText('hold', r.work_order_id, previews, costs)} onClick={() => onDefer(r)}>
+                        Don't send
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </>
   )
 }
 

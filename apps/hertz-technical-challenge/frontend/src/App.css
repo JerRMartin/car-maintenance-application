@@ -891,3 +891,16 @@ td .sub {
   font-size: 11px;
   color: var(--muted);
 }
+
+/* drag between vendor tables */
+.drop-zone.droppable {
+  outline: 2px dashed var(--yellow-border);
+  outline-offset: 2px;
+}
+.drop-zone.over {
+  outline: 2px solid var(--yellow);
+  background: var(--yellow-soft);
+}
+.drop-zone tr[draggable='true'] {
+  cursor: grab;
+}
