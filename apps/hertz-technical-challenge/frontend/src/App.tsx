@@ -328,8 +328,9 @@ export default function App() {
           }}
         >
           <p className="warn-line">
-            ⚠ {jobName(deferRow.job_type)} takes <strong>{data.jobs[deferRow.work_order_id]?.vendor_days} days</strong> at the
-            vendor. Not sending it this week delays this car by a week.
+            ⚠ <strong>{jobName(deferRow.job_type)}</strong> on this <strong>{className(deferRow.vehicle_class)}</strong> car
+            takes <strong>{daysText(data.jobs[deferRow.work_order_id]?.vendor_days ?? 0)}</strong> at the vendor. Not sending it
+            this week delays this car by a week.
           </p>
           <table className="mini">
             <tbody>
@@ -347,13 +348,6 @@ export default function App() {
               </tr>
             </tbody>
           </table>
-          {previews[deferRow.work_order_id]?.hold && (
-            <p>
-              This week's cost: {signed(previews[deferRow.work_order_id]!.hold!.total_change)} (the{' '}
-              {money(deferRow.vendor_price)} moves to next week). Vendor budget left this week:{' '}
-              {money(previews[deferRow.work_order_id]!.hold!.budget_left)}.
-            </p>
-          )}
         </ConfirmDialog>
       )}
       {confirmReset && (
