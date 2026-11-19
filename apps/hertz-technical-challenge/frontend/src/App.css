@@ -757,3 +757,7 @@ section:first-of-type {
 .btn-danger:hover:not(:disabled) {
   background: #333;
 }
+.grid-note {
+  margin-top: 10px;
+  font-size: 13px;
+}

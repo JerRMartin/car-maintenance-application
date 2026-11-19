@@ -586,6 +586,7 @@ function ShortageGrid({ cells, days }: { cells: ShortageCell[]; days: string[] }
   const max = Math.max(1, ...cells.map((c) => c.short))
   const get = (cls: string, d: string) => cells.find((c) => c.vehicle_class === cls && c.date === d)
   return (
+    <>
     <div className="table-wrap">
       <table className="grid">
         <thead>
@@ -610,18 +611,23 @@ function ShortageGrid({ cells, days }: { cells: ShortageCell[]; days: string[] }
                     key={d}
                     className={short ? 'num short' : 'num zero'}
                     style={short ? { background: `rgba(227, 73, 72, ${0.12 + 0.5 * (short / max)})` } : undefined}
-                    title={short ? `${short} customers without a car` : 'No shortage'}
+                    title={short ? `${short} customers without a car` : 'Not short: enough cars for every reservation'}
                   >
-                    {short || '–'}
+                    {short}
                   </td>
                 )
               })}
-              <td className="num">{lost ? money(lost) : '–'}</td>
+              <td className={lost ? 'num' : 'num zero'}>{money(lost)}</td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
+    <p className="muted grid-note">
+      Short = reservations − cars ready − cars back from maintenance, counted separately each day. Monday is fully booked
+      but not short, and repairs finished Monday are ready Tuesday, so planning only changes Tuesday onward.
+    </p>
+    </>
   )
 }
 
