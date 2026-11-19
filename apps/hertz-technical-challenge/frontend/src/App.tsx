@@ -227,23 +227,22 @@ function CostCards({ costs, baseline }: { costs: Costs; baseline: number }) {
         <span className="value">{money(costs.shop)}</span>
         <span className="note">labor + parts</span>
       </div>
-      <div className="card">
+      <div className={overBudget ? 'card over' : 'card'}>
         <span className="label">Vendor</span>
         <span className="value">{money(costs.vendor)}</span>
-        <span className="note">of {money(costs.vendor_budget)} budget</span>
+        <div className="bar" aria-hidden>
+          <div style={{ width: `${used}%` }} />
+        </div>
+        <span className="note">
+          {overBudget
+            ? `Over the ${money(costs.vendor_budget)} budget by ${money(costs.budget_left)}`
+            : `${money(costs.budget_left)} left of ${money(costs.vendor_budget)} budget`}
+        </span>
       </div>
       <div className="card">
         <span className="label">Lost revenue</span>
         <span className="value">{money(costs.lost_revenue)}</span>
         <span className="note">short cars × daily rate</span>
-      </div>
-      <div className={overBudget ? 'card over' : 'card'}>
-        <span className="label">Vendor budget left</span>
-        <span className="value">{overBudget ? '−' + money(costs.budget_left) : money(costs.budget_left)}</span>
-        <div className="bar" aria-hidden>
-          <div style={{ width: `${used}%` }} />
-        </div>
-        <span className="note">{overBudget ? `Over budget by ${money(costs.budget_left)}` : `${used.toFixed(0)}% used`}</span>
       </div>
     </div>
   )
