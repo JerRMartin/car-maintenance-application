@@ -145,7 +145,8 @@ export default function App() {
   if (!data) {
     return (
       <main className="page">
-        <h1>Fleet maintenance planner</h1>
+        <p className="eyebrow">Fleet maintenance</p>
+        <h1>Maintenance planner</h1>
         {error ? <p className="error">Couldn't load the week: {error}</p> : <p className="muted">Loading the week…</p>}
       </main>
     )
@@ -154,57 +155,131 @@ export default function App() {
   const { week, previews, decisions } = data
   const days = week.week_days
 
+  const weekLabel = `${day(days[0])} – ${day(days[days.length - 1])}`
+
   return (
-    <main className={busy ? 'page busy' : 'page'}>
-      <header className="top">
-        <div>
-          <h1>Fleet maintenance planner</h1>
-          <p className="muted">
-            Week of {day(days[0])} – {day(days[days.length - 1])} · shop {data.config.shop.tech_hours_per_day} tech
-            hrs/day, {data.config.shop.open_days.join('–')} · ${data.config.shop.labor_rate_per_hour}/hr
+    <div className={busy ? 'layout busy' : 'layout'}>
+      <Sidebar />
+      <main className="page">
+        <header className="top">
+          <div>
+            <p className="eyebrow">Fleet maintenance · {weekLabel}</p>
+            <h1>Maintenance planner</h1>
+            <p className="muted">
+              Shop: {data.config.shop.tech_hours_per_day} tech hrs/day, {data.config.shop.open_days.join('–')} · $
+              {data.config.shop.labor_rate_per_hour}/hr · Vendor budget {money(data.config.vendor.weekly_budget)}/week
+            </p>
+          </div>
+          <div className="top-actions">
+            <button className="btn-primary" disabled title="Coming next: we're agreeing the ranking rule first">
+              Use suggested order
+            </button>
+            <button className="btn-outline" disabled={busy} onClick={() => decide('reset_to_oldest_first')}>
+              Reset to oldest first
+            </button>
+          </div>
+        </header>
+
+        {data.storage === 'memory' && (
+          <p className="warning">
+            Decisions are not being saved: no Lakebase database is connected, so changes are lost on restart.
           </p>
-        </div>
-        <div className="top-actions">
-          <button disabled title="Coming next: we're agreeing the ranking rule first">
-            Use suggested order
-          </button>
-          <button disabled={busy} onClick={() => decide('reset_to_oldest_first')}>
-            Reset to oldest first
-          </button>
-        </div>
-      </header>
+        )}
+        {error && <p className="error">{error}</p>}
 
-      {data.storage === 'memory' && (
-        <p className="warning">
-          Decisions are not being saved: no Lakebase database is connected, so changes are lost on restart.
-        </p>
+        <section id="summary">
+          <SectionTitle title="Summary" subtitle="Cost of the week at a glance." badge={weekLabel} />
+          <CostCards costs={week.costs} baseline={data.baseline_total} />
+        </section>
+
+        <section id="shortages">
+          <SectionTitle title="Cars short per day" subtitle="Customers without a car, by class and day." />
+          <ShortageGrid cells={week.shortages} days={days} />
+        </section>
+
+        <section id="queue">
+          <SectionTitle
+            title="Shop queue"
+            subtitle="Worked top to bottom. Reorder jobs, or send one to the vendor."
+          />
+          <ShopQueue rows={week.shop_queue} previews={previews} costs={week.costs} busy={busy} decide={decide} jobs={data.jobs} />
+        </section>
+
+        <section id="vendor">
+          <SectionTitle title="Sent to vendor" subtitle="Ready to rent on the date shown." />
+          <VendorList rows={week.vendor} previews={previews} costs={week.costs} busy={busy} decide={decide} />
+        </section>
+
+        <section id="log">
+          <SectionTitle title="Decision log" subtitle="Every change, who made it, and what it did to the week." />
+          <DecisionLog decisions={decisions} />
+        </section>
+      </main>
+    </div>
+  )
+}
+
+// ------------------------------------------------------------- layout ----
+const NAV = [
+  { id: 'summary', label: 'Summary' },
+  { id: 'shortages', label: 'Cars short' },
+  { id: 'queue', label: 'Shop queue' },
+  { id: 'vendor', label: 'Sent to vendor' },
+  { id: 'log', label: 'Decision log' },
+]
+
+function Sidebar() {
+  const [active, setActive] = useState('summary')
+  useEffect(() => {
+    // Highlight the section currently in view.
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+        if (visible[0]) setActive(visible[0].target.id)
+      },
+      { rootMargin: '-10% 0px -70% 0px' },
+    )
+    NAV.forEach((n) => {
+      const el = document.getElementById(n.id)
+      if (el) obs.observe(el)
+    })
+    return () => obs.disconnect()
+  }, [])
+  return (
+    <nav className="sidebar" aria-label="Sections">
+      <Brand />
+      <p className="nav-group">Planner</p>
+      {NAV.map((n) => (
+        <a key={n.id} href={`#${n.id}`} className={active === n.id ? 'nav-item active' : 'nav-item'} onClick={() => setActive(n.id)}>
+          {n.label}
+        </a>
+      ))}
+    </nav>
+  )
+}
+
+// Official logo goes in frontend/public/hertz-logo.svg; until then, show the name as text.
+function Brand() {
+  const [logoOk, setLogoOk] = useState(true)
+  return (
+    <div className="brand">
+      {logoOk ? (
+        <img src="/hertz-logo.svg" alt="Hertz" onError={() => setLogoOk(false)} />
+      ) : (
+        <span className="brand-text">Hertz</span>
       )}
-      {error && <p className="error">{error}</p>}
+      <span className="brand-product">Fleet Maintenance</span>
+    </div>
+  )
+}
 
-      <CostCards costs={week.costs} baseline={data.baseline_total} />
-
-      <section>
-        <h2>Cars short per day</h2>
-        <ShortageGrid cells={week.shortages} days={days} />
-      </section>
-
-      <section>
-        <h2>
-          Shop queue <span className="muted">· worked top to bottom</span>
-        </h2>
-        <ShopQueue rows={week.shop_queue} previews={previews} costs={week.costs} busy={busy} decide={decide} jobs={data.jobs} />
-      </section>
-
-      <section>
-        <h2>Sent to vendor</h2>
-        <VendorList rows={week.vendor} previews={previews} costs={week.costs} busy={busy} decide={decide} />
-      </section>
-
-      <section>
-        <h2>Decision log</h2>
-        <DecisionLog decisions={decisions} />
-      </section>
-    </main>
+function SectionTitle({ title, subtitle, badge }: { title: string; subtitle: string; badge?: string }) {
+  return (
+    <div className="section-title">
+      <h2>{title}</h2>
+      <p className="muted">{subtitle}</p>
+      {badge && <span className="badge">{badge}</span>}
+    </div>
   )
 }
 
@@ -217,9 +292,17 @@ function CostCards({ costs, baseline }: { costs: Costs; baseline: number }) {
     <div className="cards">
       <div className="card total">
         <span className="label">Cost of the week</span>
-        <span className="value">{money(costs.total)}</span>
-        <span className={saved > 0 ? 'note good' : 'note'}>
-          {Math.round(saved) === 0 ? 'Same as oldest first' : `${signed(-saved)} vs oldest first (${money(baseline)})`}
+        <span className="value">
+          {money(costs.total)}
+          {Math.round(saved) !== 0 && (
+            <span className={saved > 0 ? 'delta down' : 'delta up'}>
+              {saved > 0 ? '↓' : '↑'}
+              {money(saved)}
+            </span>
+          )}
+        </span>
+        <span className="note">
+          {Math.round(saved) === 0 ? 'Same as oldest first' : `vs ${money(baseline)} working oldest first`}
         </span>
       </div>
       <div className="card">
