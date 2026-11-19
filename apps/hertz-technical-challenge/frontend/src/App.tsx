@@ -1333,7 +1333,7 @@ function VendorBoard({
                         title={impactText('send_to_vendor', r.work_order_id, previews, costs)}
                         onClick={() => decide('send_to_vendor', r.work_order_id)}
                       >
-                        Send this week
+                        Send for repair
                       </button>
                     </td>
                   </tr>
