@@ -265,7 +265,9 @@ def get_week() -> dict:
         "optimize": _optimize_previews(plan, inputs, cfg),
         "previews": _previews(plan, inputs, cfg, week.costs.total),
         "jobs": {k: {"vehicle_id": j.vehicle_id, "in_house": j.in_house,
-                     "vendor_price": j.vendor_price, "vendor_days": j.vendor_days}
+                     "vendor_price": j.vendor_price, "vendor_days": j.vendor_days,
+                     "shop_cost": (round(j.shop_hours * cfg.shop.labor_rate_per_hour + j.parts_cost, 2)
+                                   if j.in_house else None)}
                  for k, j in inputs.jobs.items()},
         "decisions": db.recent_decisions(cfg.planning_week.start),
         "config": cfg.model_dump(mode="json"),

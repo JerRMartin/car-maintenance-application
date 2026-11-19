@@ -82,7 +82,7 @@ interface WeekResponse {
   optimize: Record<Goal, OptionPreview>
   short_classes: string[]
   previews: Record<string, Partial<Record<Assignment, Preview>>>
-  jobs: Record<string, { vehicle_id: string; in_house: boolean; vendor_price: number; vendor_days: number }>
+  jobs: Record<string, { vehicle_id: string; in_house: boolean; vendor_price: number; vendor_days: number; shop_cost: number | null }>
   decisions: Decision[]
   config: {
     shop: { tech_hours_per_day: number; labor_rate_per_hour: number; open_days: string[] }
@@ -277,22 +277,36 @@ export default function App() {
               <CostCards costs={week.costs} baseline={data.baseline_total} />
             </section>
             <section>
-              <VendorList rows={week.vendor} previews={previews} costs={week.costs} busy={busy} decide={decide} onDefer={setDeferRow} jobs={data.jobs} />
+              <SectionTitle
+                title="Vendor-only repairs"
+                subtitle="Jobs the shop can't do. Choose which go out this week; the rest wait for next week."
+              />
+              <VendorOnlyTable
+                sent={week.vendor.filter((v) => !v.in_house)}
+                notSent={week.held}
+                jobs={data.jobs}
+                sendDay={days[0]}
+                previews={previews}
+                costs={week.costs}
+                busy={busy}
+                decide={decide}
+                onDefer={setDeferRow}
+              />
             </section>
-            {week.held.length > 0 && (
-              <section>
-                <SectionTitle title="Not sent this week" subtitle="Vendor-only jobs that haven't been sent: not paid or returned this week." />
-                <NextWeekList
-                  rows={week.held}
-                  jobs={data.jobs}
-                  sendDay={days[0]}
-                  previews={previews}
-                  costs={week.costs}
-                  busy={busy}
-                  decide={decide}
-                />
-              </section>
-            )}
+            <section>
+              <SectionTitle
+                title="Send-to-vendor queue"
+                subtitle="Jobs the shop could do, sent out instead to get the car back sooner."
+              />
+              <OutsourcedTable
+                rows={week.vendor.filter((v) => v.in_house)}
+                jobs={data.jobs}
+                previews={previews}
+                costs={week.costs}
+                busy={busy}
+                decide={decide}
+              />
+            </section>
           </>
         )}
 
@@ -545,7 +559,7 @@ const PAGES: { id: Page; label: string; subtitle: string }[] = [
   { id: 'summary', label: 'Summary', subtitle: 'The week at a glance.' },
   { id: 'shortages', label: 'Cars short', subtitle: 'Customers without a car, by class and day.' },
   { id: 'queue', label: 'Shop queue', subtitle: 'Worked top to bottom. Reorder jobs, or send one to the vendor.' },
-  { id: 'vendor', label: 'Sent to vendor', subtitle: 'Ready to rent on the date shown. Bring a job back to repair it in house.' },
+  { id: 'vendor', label: 'Vendor', subtitle: 'What goes to the outside vendor, when it is sent, and when it is back to rent.' },
   { id: 'log', label: 'Decision log', subtitle: 'Every change, who made it, and what it did to the week.' },
 ]
 
@@ -1220,86 +1234,29 @@ function ShopQueue({
   )
 }
 
-function VendorList({
-  rows,
-  previews,
-  costs,
-  busy,
-  decide,
-  onDefer,
-  jobs,
-}: {
-  rows: VendorRow[]
-  previews: WeekResponse['previews']
-  costs: Costs
-  busy: boolean
-  decide: Decide
-  onDefer: (row: VendorRow) => void
-  jobs: WeekResponse['jobs']
-}) {
-  if (!rows.length) return <p className="muted">No jobs sent to the vendor.</p>
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Order</th>
-            <th>Class</th>
-            <th>Job</th>
-            <th className="num">Price</th>
-            <th className="num">Turnaround</th>
-            <th>Ready to rent</th>
-            <th>Change</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.work_order_id}>
-              <td className="mono">{r.work_order_id}</td>
-              <td>{className(r.vehicle_class)}</td>
-              <td>
-                {jobName(r.job_type)}
-                {!r.in_house && <span className="tag">vendor-only</span>}
-              </td>
-              <td className="num">{money(r.vendor_price)}</td>
-              <td className="num">{daysText(jobs[r.work_order_id]?.vendor_days ?? 0)}</td>
-              <td>{day(r.ready_date)}</td>
-              <td>
-                {r.in_house ? (
-                  <button disabled={busy} title={impactText('bring_to_shop', r.work_order_id, previews, costs)} onClick={() => decide('bring_to_shop', r.work_order_id)}>
-                    Repair in house
-                  </button>
-                ) : (
-                  <button disabled={busy} title={impactText('hold', r.work_order_id, previews, costs)} onClick={() => onDefer(r)}>
-                    Don't send
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function NextWeekList({
-  rows,
+function VendorOnlyTable({
+  sent,
+  notSent,
   jobs,
   sendDay,
   previews,
   costs,
   busy,
   decide,
+  onDefer,
 }: {
-  rows: HoldRow[]
+  sent: VendorRow[]
+  notSent: HoldRow[]
   jobs: WeekResponse['jobs']
   sendDay: string
   previews: WeekResponse['previews']
   costs: Costs
   busy: boolean
   decide: Decide
+  onDefer: (row: VendorRow) => void
 }) {
+  if (!sent.length && !notSent.length) return <p className="muted">No vendor-only repairs.</p>
+  const nextSend = addDays(sendDay, 7)
   return (
     <div className="table-wrap">
       <table>
@@ -1310,24 +1267,52 @@ function NextWeekList({
             <th>Job</th>
             <th className="num">Price</th>
             <th className="num">Turnaround</th>
-            <th>Back if sent this week</th>
-            <th>Back if sent next week</th>
+            <th>Status</th>
+            <th>Send date</th>
+            <th>Ready to rent</th>
             <th>Change</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
+          {sent.map((r) => (
+            <tr key={r.work_order_id}>
+              <td className="mono">{r.work_order_id}</td>
+              <td>{className(r.vehicle_class)}</td>
+              <td>{jobName(r.job_type)}</td>
+              <td className="num">{money(r.vendor_price)}</td>
+              <td className="num">{daysText(jobs[r.work_order_id]?.vendor_days ?? 0)}</td>
+              <td>
+                <span className="status sent">Sending this week</span>
+              </td>
+              <td>{day(r.sent_date)}</td>
+              <td>{day(r.ready_date)}</td>
+              <td>
+                <button disabled={busy} title={impactText('hold', r.work_order_id, previews, costs)} onClick={() => onDefer(r)}>
+                  Don't send
+                </button>
+              </td>
+            </tr>
+          ))}
+          {notSent.map((r) => {
             const j = jobs[r.work_order_id]
+            const vd = j?.vendor_days ?? 0
             return (
-              <tr key={r.work_order_id}>
+              <tr key={r.work_order_id} className="later">
                 <td className="mono">{r.work_order_id}</td>
                 <td>{className(r.vehicle_class)}</td>
                 <td>{jobName(r.job_type)}</td>
                 <td className="num">{money(j?.vendor_price ?? 0)}</td>
-                <td className="num">{daysText(j?.vendor_days ?? 0)}</td>
-                <td>{day(addDays(sendDay, j?.vendor_days ?? 0))}</td>
+                <td className="num">{daysText(vd)}</td>
                 <td>
-                  <strong>{day(addDays(sendDay, 7 + (j?.vendor_days ?? 0)))}</strong>
+                  <span className="status">Not sent</span>
+                </td>
+                <td>
+                  Next: {day(nextSend)}
+                  <span className="sub">this week: {day(sendDay)}</span>
+                </td>
+                <td>
+                  {day(addDays(nextSend, vd))}
+                  <span className="sub">if sent this week: {day(addDays(sendDay, vd))}</span>
                 </td>
                 <td>
                   <button
@@ -1341,6 +1326,71 @@ function NextWeekList({
               </tr>
             )
           })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function OutsourcedTable({
+  rows,
+  jobs,
+  previews,
+  costs,
+  busy,
+  decide,
+}: {
+  rows: VendorRow[]
+  jobs: WeekResponse['jobs']
+  previews: WeekResponse['previews']
+  costs: Costs
+  busy: boolean
+  decide: Decide
+}) {
+  if (!rows.length)
+    return (
+      <p className="muted">
+        Nothing outsourced. Use “Send to vendor” in the shop queue, or Optimize: Car readiness.
+      </p>
+    )
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Order</th>
+            <th>Class</th>
+            <th>Job</th>
+            <th className="num">Vendor price</th>
+            <th className="num">Shop cost</th>
+            <th className="num">Turnaround</th>
+            <th>Send date</th>
+            <th>Ready to rent</th>
+            <th>Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.work_order_id}>
+              <td className="mono">{r.work_order_id}</td>
+              <td>{className(r.vehicle_class)}</td>
+              <td>{jobName(r.job_type)}</td>
+              <td className="num">{money(r.vendor_price)}</td>
+              <td className="num muted">{money(jobs[r.work_order_id]?.shop_cost ?? 0)}</td>
+              <td className="num">{daysText(jobs[r.work_order_id]?.vendor_days ?? 0)}</td>
+              <td>{day(r.sent_date)}</td>
+              <td>{day(r.ready_date)}</td>
+              <td>
+                <button
+                  disabled={busy}
+                  title={impactText('bring_to_shop', r.work_order_id, previews, costs)}
+                  onClick={() => decide('bring_to_shop', r.work_order_id)}
+                >
+                  Repair in house
+                </button>
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
