@@ -587,3 +587,126 @@ section:first-of-type {
     gap: 6px;
   }
 }
+
+/* ------------------------------------------------------ queue tabs/board */
+.tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: #f0efeb;
+  border-radius: 999px;
+  margin-bottom: 14px;
+}
+.tab {
+  border: none;
+  background: none;
+  padding: 7px 18px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.tab:hover:not(:disabled) {
+  background: #e6e5e0;
+}
+.tab.active {
+  background: var(--yellow);
+  color: var(--ink);
+}
+.board-hint {
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(168px, 1fr));
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  align-items: start;
+}
+.day-col {
+  background: #f7f7f5;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px;
+  min-height: 200px;
+}
+.later-col {
+  background: #fbfbf9;
+  border-style: dashed;
+}
+.day-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.day-title {
+  font-weight: 800;
+  font-size: 15px;
+}
+.day-sub {
+  font-size: 12px;
+}
+.day-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.job-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: grab;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+.job-card:hover {
+  border-color: var(--yellow-border);
+}
+.job-card.dragging {
+  opacity: 0.4;
+}
+.job-card.drop-before {
+  box-shadow: 0 -3px 0 var(--yellow);
+}
+.job-card.drop-after {
+  box-shadow: 0 3px 0 var(--yellow);
+}
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 700;
+}
+.card-class {
+  font-weight: 600;
+}
+.card-foot {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+}
+.card-foot .ready {
+  color: var(--good);
+  font-weight: 600;
+}
+.card-vendor {
+  margin-top: 6px;
+  font-size: 12px;
+  padding: 2px 10px;
+  border-width: 1px;
+  align-self: flex-start;
+  white-space: nowrap;
+}
+.today-cap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.today-cap .bar {
+  width: 220px;
+}

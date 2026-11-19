@@ -61,6 +61,12 @@ class PlanItem:
 
 # --------------------------------------------------------------- outputs ----
 @dataclass
+class DaySegment:
+    day: date
+    hours: float                       # shop hours spent on this job that day
+
+
+@dataclass
 class ShopRow:
     position: int                      # place in the shop queue (1 = first)
     work_order_id: str
@@ -73,6 +79,7 @@ class ShopRow:
     finish_day: date | None
     ready_date: date | None            # None = not ready this week
     shop_cost: float
+    segments: list[DaySegment] = field(default_factory=list)   # hours per day
 
 
 @dataclass
@@ -123,6 +130,8 @@ class Week:
     shortages: list[ShortageCell]
     costs: Costs
     week_days: list[date] = field(default_factory=list)
+    shop_days: list[date] = field(default_factory=list)
+    hours_per_day: float = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -176,9 +185,11 @@ def simulate(plan: list[PlanItem], inputs: Inputs, cfg: PlanningConfig) -> Week:
     for item in (p for p in plan if p.assignment == SHOP):
         job = inputs.jobs[item.work_order_id]
         remaining, start, finish = job.shop_hours, None, None
+        segments: list[DaySegment] = []
         while remaining > EPS and day_i < len(shop_days):
             start = start or shop_days[day_i]
             work = min(remaining, hours_left)
+            segments.append(DaySegment(shop_days[day_i], work))
             remaining -= work
             hours_left -= work
             if remaining <= EPS:
@@ -191,7 +202,8 @@ def simulate(plan: list[PlanItem], inputs: Inputs, cfg: PlanningConfig) -> Week:
             position=len(shop_queue) + 1, work_order_id=job.work_order_id,
             vehicle_class=job.vehicle_class, job_type=job.job_type, opened_ts=job.opened_ts,
             shop_hours=job.shop_hours, hours_worked=worked, start_day=start, finish_day=finish,
-            ready_date=finish + ready_delay if finish else None, shop_cost=cost))
+            ready_date=finish + ready_delay if finish else None, shop_cost=cost,
+            segments=segments))
 
     # --- Vendor: sent on the first dispatch day (assumption C) ---------------
     send_day = next(d for d in days if _day_name(d) in cfg.vendor.dispatch_days)
@@ -227,7 +239,8 @@ def simulate(plan: list[PlanItem], inputs: Inputs, cfg: PlanningConfig) -> Week:
                   total=shop_total + vendor_total + lost_total,
                   vendor_budget=cfg.vendor.weekly_budget,
                   budget_left=cfg.vendor.weekly_budget - vendor_total)
-    return Week(shop_queue, vendor, held, shortages, costs, week_days=days)
+    return Week(shop_queue, vendor, held, shortages, costs, week_days=days,
+                shop_days=shop_days, hours_per_day=hours_per_day)
 
 
 # ----------------------------------------------------------------- plans ----

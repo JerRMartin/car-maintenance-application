@@ -47,6 +47,19 @@ class BaselineMatchesNotebook(unittest.TestCase):
         # No work on weekends, and no day over 12 hours
         self.assertTrue(all(r.start_day is None or r.start_day.weekday() < 5 for r in q))
 
+    def test_daily_capacity(self):
+        from collections import defaultdict
+        per_day = defaultdict(float)
+        for r in self.week.shop_queue:
+            self.assertAlmostEqual(sum(g.hours for g in r.segments), r.hours_worked)
+            for g in r.segments:
+                per_day[g.day] += g.hours
+        self.assertEqual(sorted(per_day), self.week.shop_days)       # Mon-Fri only
+        self.assertTrue(all(abs(h - 12) < 1e-9 for h in per_day.values()))  # every day full
+        wo48 = next(r for r in self.week.shop_queue if r.work_order_id == "WO-048")
+        self.assertEqual([(g.day, g.hours) for g in wo48.segments],
+                         [(date(2026, 10, 12), 2.0), (date(2026, 10, 13), 1.0)])
+
     def test_step4_vendor(self):
         got = {(v.work_order_id, v.sent_date, v.ready_date) for v in self.week.vendor}
         self.assertEqual(got, {("WO-057", date(2026, 10, 12), date(2026, 10, 17)),

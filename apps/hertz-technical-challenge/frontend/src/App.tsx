@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react'
 import './App.css'
 
 // ---------------------------------------------------------------- types ----
@@ -14,6 +14,7 @@ interface ShopRow {
   start_day: string | null
   ready_date: string | null
   shop_cost: number
+  segments: { day: string; hours: number }[]
 }
 interface VendorRow {
   work_order_id: string
@@ -66,6 +67,8 @@ interface WeekResponse {
     shortages: ShortageCell[]
     costs: Costs
     week_days: string[]
+    shop_days: string[]
+    hours_per_day: number
   }
   baseline_total: number
   previews: Record<string, Partial<Record<Assignment, Preview>>>
@@ -202,10 +205,13 @@ export default function App() {
               </p>
             </section>
             <section>
-              <SectionTitle title="Latest decisions" subtitle="The most recent changes to the plan." />
-              <DecisionLog decisions={decisions.slice(0, 5)} />
-              <a className="see-all" href="#/log">
-                View the full decision log →
+              <TodayQueue rows={week.shop_queue} shopDays={week.shop_days} hoursPerDay={week.hours_per_day} shortClasses={shortClasses} />
+            </section>
+            <section>
+              <SectionTitle title="Still short" subtitle="Classes that will still turn customers away this week, with the current plan." />
+              <ShortSummary cells={week.shortages} />
+              <a className="see-all" href="#/shortages">
+                See cars short by day →
               </a>
             </section>
           </>
@@ -223,7 +229,7 @@ export default function App() {
               <CostCards costs={week.costs} baseline={data.baseline_total} />
             </section>
             <section>
-              <ShopQueue
+              <QueuePage
                 rows={week.shop_queue}
                 previews={previews}
                 costs={week.costs}
@@ -231,6 +237,8 @@ export default function App() {
                 decide={decide}
                 jobs={data.jobs}
                 shortClasses={shortClasses}
+                shopDays={week.shop_days}
+                hoursPerDay={week.hours_per_day}
               />
             </section>
           </>
@@ -253,6 +261,134 @@ export default function App() {
           </section>
         )}
       </main>
+    </div>
+  )
+}
+
+
+// ------------------------------------------------------- summary parts ----
+// "Today" is today's date if it's a shop day in the plan week, otherwise the plan's first shop day.
+function planDay(shopDays: string[]): { day: string; isToday: boolean } {
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  return shopDays.includes(today) ? { day: today, isToday: true } : { day: shopDays[0], isToday: false }
+}
+
+function TodayQueue({
+  rows,
+  shopDays,
+  hoursPerDay,
+  shortClasses,
+}: {
+  rows: ShopRow[]
+  shopDays: string[]
+  hoursPerDay: number
+  shortClasses: Set<string>
+}) {
+  const { day: d, isToday } = planDay(shopDays)
+  const items = rows.flatMap((r) => {
+    const i = r.segments.findIndex((g) => g.day === d)
+    return i < 0 ? [] : [{ r, hours: r.segments[i].hours, continued: i > 0, continues: i < r.segments.length - 1 || !r.ready_date }]
+  })
+  const used = items.reduce((sum, x) => sum + x.hours, 0)
+  return (
+    <>
+      <SectionTitle
+        title={isToday ? "Today's shop queue" : `Shop queue for ${day(d)}`}
+        subtitle={isToday ? 'Jobs the shop works today, in order.' : 'First day of the plan week (today is outside it).'}
+      />
+      <div className="today-cap">
+        <div className="bar" aria-hidden>
+          <div style={{ width: `${Math.min(100, (used / hoursPerDay) * 100)}%` }} />
+        </div>
+        <span className="muted">
+          {+used.toFixed(2)} of {hoursPerDay} tech hours · {items.length} jobs
+        </span>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th className="num">#</th>
+              <th>Order</th>
+              <th>Class</th>
+              <th>Job</th>
+              <th className="num">Hours</th>
+              <th>Ready to rent</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map(({ r, hours, continued, continues }) => (
+              <tr key={r.work_order_id}>
+                <td className="num">{r.position}</td>
+                <td className="mono">{r.work_order_id}</td>
+                <td>
+                  {className(r.vehicle_class)}
+                  {shortClasses.has(r.vehicle_class) && <span className="tag short-tag">short</span>}
+                </td>
+                <td>{jobName(r.job_type)}</td>
+                <td className="num">{hours === r.shop_hours ? hours : `${+hours.toFixed(2)} of ${r.shop_hours}`}</td>
+                <td>
+                  {continues ? (
+                    <span className="muted">{r.ready_date ? `Continues, ready ${day(r.ready_date)}` : 'Continues next week'}</span>
+                  ) : (
+                    day(r.ready_date)
+                  )}
+                  {continued && <span className="muted"> (started earlier)</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <a className="see-all" href="#/queue">
+        Plan the week by day →
+      </a>
+    </>
+  )
+}
+
+function ShortSummary({ cells }: { cells: ShortageCell[] }) {
+  const rows = useMemo(() => {
+    const by: Record<string, { carDays: number; lost: number; peak: number; peakDay: string }> = {}
+    for (const c of cells) {
+      const b = (by[c.vehicle_class] ??= { carDays: 0, lost: 0, peak: 0, peakDay: c.date })
+      b.carDays += c.short
+      b.lost += c.lost_revenue
+      if (c.short > b.peak) {
+        b.peak = c.short
+        b.peakDay = c.date
+      }
+    }
+    return Object.entries(by)
+      .filter(([, b]) => b.carDays > 0)
+      .sort((a, b) => b[1].lost - a[1].lost)
+  }, [cells])
+  if (!rows.length) return <p className="muted">No class is short this week.</p>
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Class</th>
+            <th className="num">Worst day</th>
+            <th className="num">Car-days short</th>
+            <th className="num">Lost revenue</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([cls, b]) => (
+            <tr key={cls}>
+              <td>{className(cls)}</td>
+              <td className="num">
+                <strong>{b.peak}</strong> short on {day(b.peakDay)}
+              </td>
+              <td className="num">{b.carDays}</td>
+              <td className="num">{money(b.lost)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -445,6 +581,202 @@ function impactText(action: string, wo: string, previews: WeekResponse['previews
   ].join('\n')
 }
 
+// Final queue position once the dragged job is taken out of its old spot.
+function moveTarget(from: number, position: number, after: boolean): number {
+  const to = after ? position + 1 : position
+  return from < to ? to - 1 : to
+}
+
+type QueueProps = {
+  rows: ShopRow[]
+  previews: WeekResponse['previews']
+  costs: Costs
+  busy: boolean
+  decide: Decide
+  jobs: WeekResponse['jobs']
+  shortClasses: Set<string>
+  shopDays: string[]
+  hoursPerDay: number
+}
+
+function QueuePage(props: QueueProps) {
+  const [tab, setTab] = useState<'day' | 'list'>('day')
+  return (
+    <>
+      <div className="tabs" role="tablist">
+        <button role="tab" aria-selected={tab === 'day'} className={tab === 'day' ? 'tab active' : 'tab'} onClick={() => setTab('day')}>
+          By day
+        </button>
+        <button role="tab" aria-selected={tab === 'list'} className={tab === 'list' ? 'tab active' : 'tab'} onClick={() => setTab('list')}>
+          Full queue
+        </button>
+      </div>
+      {tab === 'day' ? <DayBoard {...props} /> : <ShopQueue {...props} />}
+    </>
+  )
+}
+
+interface BoardCard {
+  row: ShopRow
+  hours: number
+  continued: boolean // started on an earlier day
+  continues: boolean // finishes on a later day (or next week)
+}
+
+function DayBoard({ rows, costs, busy, decide, jobs, shortClasses, previews, shopDays, hoursPerDay }: QueueProps) {
+  const columns = useMemo(() => {
+    const byDay = shopDays.map((d) => ({ key: d, cards: [] as BoardCard[] }))
+    const later: BoardCard[] = []
+    for (const row of rows) {
+      if (!row.segments.length) {
+        later.push({ row, hours: row.shop_hours, continued: false, continues: false })
+        continue
+      }
+      row.segments.forEach((seg, i) => {
+        const col = byDay.find((c) => c.key === seg.day)
+        col?.cards.push({
+          row,
+          hours: seg.hours,
+          continued: i > 0,
+          continues: i < row.segments.length - 1 || !row.ready_date,
+        })
+      })
+    }
+    return { byDay, later }
+  }, [rows, shopDays])
+
+  const [dragging, setDragging] = useState<ShopRow | null>(null)
+  const [dropAt, setDropAt] = useState<{ col: string; position: number; after: boolean } | null>(null)
+  const endDrag = () => {
+    setDragging(null)
+    setDropAt(null)
+  }
+  const drop = () => {
+    if (dragging && dropAt) {
+      const to = moveTarget(dragging.position, dropAt.position, dropAt.after)
+      if (to !== dragging.position) decide('move', dragging.work_order_id, to)
+    }
+    endDrag()
+  }
+  // Dropping on empty space at the bottom of a column = after its last job.
+  const overColumn = (col: string, cards: BoardCard[]) => (e: DragEvent<HTMLDivElement>) => {
+    if (!dragging || !cards.length) return
+    e.preventDefault()
+    const last = cards[cards.length - 1].row.position
+    if (dropAt?.col !== col || dropAt.position !== last || !dropAt.after) setDropAt({ col, position: last, after: true })
+  }
+
+  const renderColumn = (key: string, title: string, cards: BoardCard[], isLater = false) => {
+    const used = cards.reduce((sum, c) => sum + c.hours, 0)
+    const pct = Math.min(100, (used / hoursPerDay) * 100)
+    return (
+      <div
+        key={key}
+        className={isLater ? 'day-col later-col' : 'day-col'}
+        onDragOver={overColumn(key, cards)}
+        onDrop={(e) => {
+          e.preventDefault()
+          drop()
+        }}
+      >
+        <div className="day-head">
+          <span className="day-title">{title}</span>
+          {isLater ? (
+            <span className="muted day-sub">
+              {cards.length} jobs · {used} hrs of work
+            </span>
+          ) : (
+            <>
+              <div className="bar" aria-hidden>
+                <div style={{ width: `${pct}%` }} />
+              </div>
+              <span className="muted day-sub">
+                {+used.toFixed(2)} / {hoursPerDay} hrs · {cards.length} jobs
+              </span>
+            </>
+          )}
+        </div>
+        <div className="day-cards">
+          {cards.map((c) => {
+            const r = c.row
+            const marker =
+              dropAt?.col === key && dropAt.position === r.position ? (dropAt.after ? 'drop-after' : 'drop-before') : ''
+            return (
+              <div
+                key={`${r.work_order_id}-${key}`}
+                className={['job-card', dragging?.work_order_id === r.work_order_id ? 'dragging' : '', marker].join(' ')}
+                draggable={!busy}
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = 'move'
+                  e.dataTransfer.setData('text/plain', r.work_order_id)
+                  setDragging(r)
+                }}
+                onDragOver={(e) => {
+                  if (!dragging) return
+                  e.preventDefault()
+                  e.stopPropagation()
+                  const box = e.currentTarget.getBoundingClientRect()
+                  const after = e.clientY > box.top + box.height / 2
+                  if (dropAt?.col !== key || dropAt.position !== r.position || dropAt.after !== after)
+                    setDropAt({ col: key, position: r.position, after })
+                }}
+                onDragEnd={endDrag}
+                title={`#${r.position} in the queue · drag to another day to reschedule`}
+              >
+                <div className="card-top">
+                  <span className="mono">{r.work_order_id}</span>
+                  <span className="muted">#{r.position}</span>
+                </div>
+                <div className="card-class">
+                  {className(r.vehicle_class)}
+                  {shortClasses.has(r.vehicle_class) && <span className="tag short-tag">short</span>}
+                </div>
+                <div className="card-job">
+                  {jobName(r.job_type)} ·{' '}
+                  {c.hours === r.shop_hours ? `${r.shop_hours} h` : `${+c.hours.toFixed(2)} of ${r.shop_hours} h`}
+                </div>
+                <div className="card-foot">
+                  {c.continued && <span className="muted">← continued from earlier</span>}
+                  {c.continues ? (
+                    <span className="muted">{r.ready_date ? 'continues →' : 'continues next week'}</span>
+                  ) : isLater ? (
+                    <span className="muted">Not this week</span>
+                  ) : (
+                    <span className="ready">Ready {day(r.ready_date)}</span>
+                  )}
+                </div>
+                {!c.continued && (
+                  <button
+                    className="card-vendor"
+                    disabled={busy}
+                    title={impactText('send_to_vendor', r.work_order_id, previews, costs)}
+                    onClick={() => decide('send_to_vendor', r.work_order_id)}
+                  >
+                    To vendor · {money(jobs[r.work_order_id]?.vendor_price ?? 0)}
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <p className="muted board-hint">
+        Each day's {hoursPerDay} tech hours are filled in queue order. Drag a job to another day to reschedule it; the jobs
+        after it shift.
+      </p>
+      <div className="board">
+        {columns.byDay.map((c) => renderColumn(c.key, day(c.key), c.cards))}
+        {renderColumn('later', 'Not this week', columns.later, true)}
+      </div>
+    </>
+  )
+}
+
 type SortKey = 'position' | 'vehicle_class' | 'job_type' | 'shop_hours' | 'ready_date' | 'shop_cost'
 type ReadyFilter = 'all' | 'ready' | 'not_ready'
 
@@ -473,6 +805,8 @@ function ShopQueue({
   decide: Decide
   jobs: WeekResponse['jobs']
   shortClasses: Set<string>
+  shopDays?: string[]
+  hoursPerDay?: number
 }) {
   const [moveTo, setMoveTo] = useState<Record<string, string>>({})
 
@@ -540,8 +874,7 @@ function ShopQueue({
       const from = dragging.position
       // Final position in the queue once the dragged row is taken out of its old spot.
       // Positions are real queue positions, so this also works while filtered.
-      let to = dropAt.after ? dropAt.position + 1 : dropAt.position
-      if (from < to) to -= 1
+      const to = moveTarget(from, dropAt.position, dropAt.after)
       if (to !== from) decide('move', dragging.work_order_id, to)
     }
     endDrag()
