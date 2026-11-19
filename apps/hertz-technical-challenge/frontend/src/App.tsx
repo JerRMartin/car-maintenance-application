@@ -1410,10 +1410,20 @@ function OptimizeButton({
                 <span className="split-title">
                   {GOAL_LABEL[g]}
                   {g === 'savings' && <span className="tag">default</span>}
+                  {g === goal && (
+                    <span className="split-check" aria-label="Selected">
+                      ✓
+                    </span>
+                  )}
                 </span>
                 <span className="muted">{GOAL_HELP[g]}</span>
                 {g === 'savings' && (
-                  <span className="split-note">Note: only uses the vendor budget when it lowers the cost of the week.</span>
+                  <span className="split-note">
+                    <span className="split-note-icon" aria-hidden>
+                      i
+                    </span>
+                    Only uses the vendor budget when it lowers the cost of the week.
+                  </span>
                 )}
               </button>
             )
