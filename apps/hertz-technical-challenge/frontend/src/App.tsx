@@ -416,11 +416,31 @@ function ShopQueue({
   jobs: WeekResponse['jobs']
 }) {
   const [moveTo, setMoveTo] = useState<Record<string, string>>({})
+
+  // Drag and drop: drop above or below the hovered row, depending on which half the pointer is in.
+  const [dragging, setDragging] = useState<ShopRow | null>(null)
+  const [dropAt, setDropAt] = useState<{ position: number; after: boolean } | null>(null)
+  const endDrag = () => {
+    setDragging(null)
+    setDropAt(null)
+  }
+  const onDrop = () => {
+    if (dragging && dropAt) {
+      const from = dragging.position
+      // Final position in the queue once the dragged row is taken out of its old spot.
+      let to = dropAt.after ? dropAt.position + 1 : dropAt.position
+      if (from < to) to -= 1
+      if (to !== from) decide('move', dragging.work_order_id, to)
+    }
+    endDrag()
+  }
+
   return (
     <div className="table-wrap">
       <table>
         <thead>
           <tr>
+            <th aria-label="Drag to reorder" />
             <th className="num">#</th>
             <th>Order</th>
             <th>Vehicle</th>
@@ -437,7 +457,35 @@ function ShopQueue({
           {rows.map((r) => {
             const partial = r.hours_worked > 0 && !r.ready_date
             return (
-              <tr key={r.work_order_id} className={r.ready_date ? '' : 'later'}>
+              <tr
+                key={r.work_order_id}
+                className={[
+                  r.ready_date ? '' : 'later',
+                  dragging?.work_order_id === r.work_order_id ? 'dragging' : '',
+                  dropAt?.position === r.position ? (dropAt.after ? 'drop-after' : 'drop-before') : '',
+                ].join(' ')}
+                draggable={!busy}
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = 'move'
+                  e.dataTransfer.setData('text/plain', r.work_order_id)
+                  setDragging(r)
+                }}
+                onDragOver={(e) => {
+                  if (!dragging) return
+                  e.preventDefault()
+                  const box = e.currentTarget.getBoundingClientRect()
+                  const after = e.clientY > box.top + box.height / 2
+                  if (dropAt?.position !== r.position || dropAt.after !== after) setDropAt({ position: r.position, after })
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  onDrop()
+                }}
+                onDragEnd={endDrag}
+              >
+                <td className="grip" title="Drag to reorder" aria-hidden>
+                  ⠿
+                </td>
                 <td className="num">{r.position}</td>
                 <td className="mono">{r.work_order_id}</td>
                 <td className="mono muted">{jobs[r.work_order_id]?.vehicle_id}</td>
