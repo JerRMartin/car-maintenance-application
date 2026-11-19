@@ -342,7 +342,7 @@ function ShopQueue({
             <th>Ready to rent</th>
             <th className="num">Shop cost</th>
             <th>Reorder</th>
-            <th>Send to vendor</th>
+            <th>Vendor</th>
             <th>Hold</th>
           </tr>
         </thead>
@@ -397,7 +397,7 @@ function ShopQueue({
                 </td>
                 <td>
                   <button disabled={busy} onClick={() => decide('send_to_vendor', r.work_order_id)}>
-                    Send
+                    Send to vendor
                   </button>
                   <Effect p={previews[r.work_order_id]?.vendor} />
                 </td>
@@ -457,7 +457,7 @@ function VendorList({
                 {r.in_house && (
                   <span>
                     <button disabled={busy} onClick={() => decide('bring_to_shop', r.work_order_id)}>
-                      Back to shop
+                      Repair in house
                     </button>
                     <Effect p={previews[r.work_order_id]?.shop} />
                   </span>
@@ -515,14 +515,14 @@ function HeldList({
                 {r.in_house && (
                   <span>
                     <button disabled={busy} onClick={() => decide('bring_to_shop', r.work_order_id)}>
-                      To shop
+                      Repair in house
                     </button>
                     <Effect p={previews[r.work_order_id]?.shop} />
                   </span>
                 )}
                 <span>
                   <button disabled={busy} onClick={() => decide('send_to_vendor', r.work_order_id)}>
-                    To vendor
+                    Send to vendor
                   </button>
                   <Effect p={previews[r.work_order_id]?.vendor} />
                 </span>
