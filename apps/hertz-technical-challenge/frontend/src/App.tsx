@@ -814,12 +814,19 @@ function ShopQueue({
   const [search, setSearch] = useState('')
   const [cls, setCls] = useState('all')
   const [job, setJob] = useState('all')
+  const [hours, setHours] = useState('all')
   const [ready, setReady] = useState<ReadyFilter>('all')
   const [onlyShort, setOnlyShort] = useState(false)
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: 'position', desc: false })
 
   const classes = useMemo(() => [...new Set(rows.map((r) => r.vehicle_class))].sort(), [rows])
   const jobTypes = useMemo(() => [...new Set(rows.map((r) => r.job_type))].sort(), [rows])
+  // Job lengths present in the queue, with how many jobs have each
+  const hourOptions = useMemo(() => {
+    const n = new Map<number, number>()
+    rows.forEach((r) => n.set(r.shop_hours, (n.get(r.shop_hours) ?? 0) + 1))
+    return [...n.entries()].sort((a, b) => a[0] - b[0])
+  }, [rows])
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -828,6 +835,7 @@ function ShopQueue({
         (!q || r.work_order_id.toLowerCase().includes(q) || (jobs[r.work_order_id]?.vehicle_id ?? '').toLowerCase().includes(q)) &&
         (cls === 'all' || r.vehicle_class === cls) &&
         (job === 'all' || r.job_type === job) &&
+        (hours === 'all' || r.shop_hours === Number(hours)) &&
         (ready === 'all' || (ready === 'ready' ? !!r.ready_date : !r.ready_date)) &&
         (!onlyShort || shortClasses.has(r.vehicle_class)),
     )
@@ -838,7 +846,7 @@ function ShopQueue({
       const c = va < vb ? -1 : va > vb ? 1 : a.position - b.position
       return sort.desc ? -c : c
     })
-  }, [rows, jobs, search, cls, job, ready, onlyShort, shortClasses, sort])
+  }, [rows, jobs, search, cls, job, hours, ready, onlyShort, shortClasses, sort])
 
   const filtered = shown.length !== rows.length
   const queueOrder = sort.key === 'position' && !sort.desc
@@ -847,6 +855,7 @@ function ShopQueue({
     setSearch('')
     setCls('all')
     setJob('all')
+    setHours('all')
     setReady('all')
     setOnlyShort(false)
     setSort({ key: 'position', desc: false })
@@ -904,6 +913,14 @@ function ShopQueue({
           {jobTypes.map((j) => (
             <option key={j} value={j}>
               {jobName(j)}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Job hours" value={hours} onChange={(e) => setHours(e.target.value)}>
+          <option value="all">Any hours</option>
+          {hourOptions.map(([h, count]) => (
+            <option key={h} value={String(h)}>
+              {h} h ({count} {count === 1 ? 'job' : 'jobs'})
             </option>
           ))}
         </select>
