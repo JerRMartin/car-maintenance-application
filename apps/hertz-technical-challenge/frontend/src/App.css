@@ -811,9 +811,10 @@ section:first-of-type {
   align-items: center;
   gap: 6px;
 }
-.split-numbers {
+.split-note {
   font-size: 12px;
-  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  font-style: italic;
 }
 .warn-line {
   background: var(--warn-bg);

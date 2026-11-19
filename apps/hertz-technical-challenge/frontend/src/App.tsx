@@ -1389,7 +1389,6 @@ function OptimizeButton({
       {open && (
         <div className="split-menu" role="menu">
           {(['savings', 'readiness'] as Goal[]).map((g) => {
-            const p = options[g]
             return (
               <button
                 key={g}
@@ -1406,10 +1405,9 @@ function OptimizeButton({
                   {g === 'savings' && <span className="tag">default</span>}
                 </span>
                 <span className="muted">{GOAL_HELP[g]}</span>
-                <span className="split-numbers">
-                  Week cost {money(p.total)} ({signed(p.total - current)}) · {p.car_days_short} car-days short ·{' '}
-                  {money(p.budget_left)} budget left
-                </span>
+                {g === 'savings' && (
+                  <span className="split-note">Note: only uses the vendor budget when it lowers the cost of the week.</span>
+                )}
               </button>
             )
           })}
