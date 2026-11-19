@@ -1023,6 +1023,7 @@ function ShopQueue({
   decide,
   jobs,
   shortClasses,
+  shopDays,
 }: {
   rows: ShopRow[]
   previews: WeekResponse['previews']
@@ -1206,9 +1207,7 @@ function ShopQueue({
                 <Fragment key={r.work_order_id}>
                 {i === weekCut && (
                   <tr className="week-cut">
-                    <td colSpan={11}>
-                      <span>End of this week's shop hours</span> Jobs below won't be ready to rent this week.
-                    </td>
+                    <td colSpan={11}>Next week{shopDays?.length ? ` (${day(addDays(shopDays[0], 7))})` : ''}</td>
                   </tr>
                 )}
                 <tr
