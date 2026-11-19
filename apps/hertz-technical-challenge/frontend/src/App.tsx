@@ -897,7 +897,7 @@ function DayBoard({ rows, costs, busy, decide, jobs, shortClasses, previews, sho
     return (
       <tr
         key={`${r.work_order_id}-${key}`}
-        className={[c.continued ? 'later' : '', dragging?.work_order_id === r.work_order_id ? 'dragging' : '', marker].join(' ')}
+        className={[c.continued || key === 'later' ? 'later' : '', dragging?.work_order_id === r.work_order_id ? 'dragging' : '', marker].join(' ')}
         draggable={!busy}
         onDragStart={(e) => {
           e.dataTransfer.effectAllowed = 'move'
