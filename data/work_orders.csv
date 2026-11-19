@@ -1,0 +1,66 @@
+work_order_id,vehicle_id,vehicle_class,job_type,opened_ts,status
+WO-036,V-22128,SUV,Brakes,2026-10-11 13:00,Open
+WO-017,V-35023,SUV,Tires,2026-10-11 02:00,Open
+WO-038,V-55599,Economy,Battery,2026-10-08 21:00,Open
+WO-060,V-15350,Economy,Oil Change,2026-10-11 16:00,Closed
+WO-005,V-26746,Midsize,Oil Change,2026-10-10 07:00,Open
+WO-016,V-64023,Midsize,Oil Change,2026-10-08 05:00,Open
+WO-041,V-77165,Midsize,battery,2026-10-10 00:00,Open
+WO-046,V-40714,Economy,AC Repair,2026-10-10 01:00,Open
+WO-053,V-68885,SUV,AC Repair,2026-10-11 14:00,Open
+WO-027,V-68809,Midsize,Tires,2026-10-09 17:00,Open
+WO-047,V-50191,Full-size,AC Repair,2026-10-11 13:00,Open
+WO-050,V-28626,Midsize,AC Repair,2026-10-11 08:00,Open
+WO-052,V-44936,Full-size,AC Repair,2026-10-08 02:00,Open
+WO-049,V-26214,Economy,AC Repair,2026-10-10 13:00,Open
+WO-032,V-62357,SUV,Brakes,2026-10-09 14:00,Open
+WO-012,V-75759,SUV,Oil Change,2026-10-09 12:00,Open
+WO-008,V-61235,SUV,Oil Change,2026-10-10 10:00,Open
+WO-002,V-18994,SUV,Oil Change,2026-10-09 00:00,Open
+WO-054,V-27482,Premium SUV,AC Repair,2026-10-09 20:00,Open
+WO-028,V-22738,Minivan,Tires,2026-10-11 05:00,Open
+WO-003,V-82915,Midsize,Oil Change,2026-10-10 19:00,Open
+WO-013,V-43467,Premium SUV,Oil Change,2026-10-11 18:00,Open
+WO-054,V-27482,Premium SUV,AC Repair,2026-10-09 20:00,Open
+WO-021,V-14095,Economy,Tires,2026-10-08 00:00,Open
+WO-026,V-78818,SUV,Tires,2026-10-10 18:00,Open
+WO-037,V-18833,SUV,Brakes,2026-10-10 16:00,Open
+WO-015,V-15350,Economy,Oil Change,2026-10-11 16:00,Open
+WO-030,V-31112,Full-size,Brakes,2026-10-08 08:00,Open
+WO-025,V-97072,Full-size,Tires,2026-10-08 17:00,Open
+WO-020,V-13116,Midsize,Tires,2026-10-11 05:00,Open
+WO-058,V-32363,Midsize,Collision Repair,2026-10-08 22:00,Open
+WO-056,V-72779,Economy,Transmission,2026-10-09 13:00,Open
+WO-023,V-36067,Economy,Tires,2026-10-11 16:00,Open
+WO-011,V-63819,Midsize,Oil Change,2026-10-09 20:00,Open
+WO-040,V-11880,SUV,Battery,2026-10-10 01:00,Open
+WO-033,V-22933,Midsize,Brakes,2026-10-11 19:00,Open
+WO-029,V-67249,SUV,Brakes,2026-10-10 22:00,Open
+WO-035,V-62523,SUV,Brakes,2026-10-11 21:00,Open
+WO-019,V-40249,Economy,Tires,2026-10-11 12:00,Open
+WO-007,V-18199,SUV,Oil Change,2026-10-08 22:00,Open
+WO-044,V-26228,Premium SUV,Battery,2026-10-08 00:00,Open
+WO-014,V-35349,Minivan,Oil Change,2026-10-08 07:00,Open
+WO-024,V-36077,Premium SUV,Tires,2026-10-09 19:00,Open
+WO-057,V-47131,Full-size,Collision Repair,2026-10-08 22:00,Open
+WO-018,V-76861,Economy,Tires,2026-10-08 18:00,Open
+WO-059,V-70182,Full-size,Brakes,2026-10-10 06:00,Closed
+WO-001,V-15654,Economy,oil change,2026-10-09 19:00,Open
+WO-009,V-19411,Full-size,Oil Change,2026-10-09 13:00,Open
+WO-034,V-71345,Economy,Brakes,2026-10-09 16:00,Open
+WO-043,V-26552,Economy,Battery,2026-10-09 03:00,Open
+WO-006,V-87971,Premium SUV,Oil Change,2026-10-11 13:00,Open
+WO-024,V-36077,Premium SUV,Tires,2026-10-09 19:00,Open
+WO-010,V-26584,SUV,oil change,2026-10-10 10:00,Open
+WO-055,V-71063,Full-size,Transmission,2026-10-10 08:00,Open
+WO-022,V-25061,Full-size,Tires,2026-10-09 12:00,Open
+WO-048,V-43056,Midsize,AC Repair,2026-10-08 15:00,Open
+WO-039,V-83974,Full-size,battery,2026-10-08 16:00,Open
+WO-004,V-95970,Midsize,Oil Change,2026-10-09 00:00,Open
+WO-042,V-54218,SUV,Battery,2026-10-09 15:00,Open
+WO-007,V-18199,SUV,Oil Change,2026-10-08 22:00,Open
+WO-061,V-61235,SUV,Oil Change,2026-10-10 10:00,Closed
+WO-045,V-94676,SUV,AC Repair,2026-10-10 17:00,Open
+WO-062,V-32363,Midsize,Collision Repair,2026-10-08 22:00,Closed
+WO-051,V-75564,Full-size,AC Repair,2026-10-10 03:00,Open
+WO-031,V-70182,Full-size,Brakes,2026-10-10 06:00,Open

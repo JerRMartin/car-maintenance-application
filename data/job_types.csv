@@ -1,0 +1,8 @@
+job_type,shop_hours,parts_cost,in_house,vendor_price,vendor_days
+Oil Change,0.75,45,Y,195,1
+Tires,1.5,380,Y,580,1
+Brakes,2.5,260,Y,540,1
+Battery,1.5,210,Y,400,1
+AC Repair,3.0,420,Y,840,2
+Transmission,,,N,3260,7
+Collision Repair,,,N,2260,5
