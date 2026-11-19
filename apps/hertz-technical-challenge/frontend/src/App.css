@@ -1035,3 +1035,65 @@ td .sub {
   margin-left: auto;
   flex: none;
 }
+
+/* ---------------------------------------------- formula info tooltips */
+.info-tip {
+  position: static; /* the tooltip anchors to the whole menu, not the icon */
+  display: inline-flex;
+  cursor: help;
+  outline: none;
+}
+.info-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink);
+  color: var(--ink);
+  font: italic 800 10px/13px Georgia, serif;
+  text-align: center;
+}
+.info-tip:hover .info-icon,
+.info-tip:focus .info-icon {
+  background: var(--ink);
+  color: #fff;
+}
+.tip-box {
+  display: none;
+  position: absolute;
+  z-index: 60;
+  right: calc(100% + 10px);
+  top: 0;
+  width: 360px;
+  padding: 12px 14px;
+  background: #1b1b1b;
+  color: #f0efec;
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  cursor: default;
+}
+.info-tip:hover .tip-box,
+.info-tip:focus .tip-box {
+  display: block;
+}
+.tip-title {
+  display: block;
+  font-weight: 800;
+  color: var(--yellow);
+  margin-bottom: 6px;
+}
+.tip-min {
+  display: block;
+  margin-bottom: 6px;
+}
+.tip-box ol {
+  margin: 0;
+  padding-left: 18px;
+}
+.tip-box li + li {
+  margin-top: 4px;
+}

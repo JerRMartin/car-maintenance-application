@@ -111,6 +111,27 @@ const GOAL_HELP: Record<Goal, string> = {
   savings: 'Lowest cost of the week',
   readiness: 'Fewest cars short within the vendor budget',
 }
+// How each optimize goal works (method only, so it holds for any week)
+const GOAL_FORMULA: Record<Goal, { minimize: string; steps: string[] }> = {
+  savings: {
+    minimize: 'Cost of the week = shop + vendor + lost revenue',
+    steps: [
+      'Plan the shop day by day: start the job worth the most per shop hour. Value = daily rate × days its class is still short once the car is back ÷ shop hours.',
+      "Send a job to the vendor only if re-planning shows the week's cost goes down (within budget).",
+      "Keeps your Don't send choices.",
+    ],
+  },
+  readiness: {
+    minimize: 'Car-days short, within the vendor budget',
+    steps: [
+      'Cars needed by the first short morning, per class = min(reservations − cars ready, cars in repair).',
+      "First shop day: a 0/1 knapsack over its hours keeps the jobs most expensive to outsource (and any the vendor can't return in time); the rest go to the vendor.",
+      'Over budget? Drop the send that adds the least shortage per dollar, then try swaps for a cheaper plan with no more cars short.',
+      "The rest of the week is planned day by day (most value per shop hour). Keeps your Don't send choices.",
+    ],
+  },
+}
+
 const className = (c: string) =>
   c.replace(/\b\w/g, (ch) => ch.toUpperCase()).replace('Suv', 'SUV')
 const jobName = (j: string) => j.replace(/\b\w/g, (ch) => ch.toUpperCase()).replace('Ac ', 'AC ')
@@ -1433,6 +1454,39 @@ function VendorBoard({
   )
 }
 
+// Info icon with the goal's formula. Clicking it doesn't apply the option.
+function InfoTip({ goal }: { goal: Goal }) {
+  const f = GOAL_FORMULA[goal]
+  return (
+    <span
+      className="info-tip"
+      tabIndex={0}
+      role="note"
+      aria-label={`How ${GOAL_LABEL[goal]} works`}
+      onClick={(e) => {
+        e.stopPropagation()
+        e.preventDefault()
+      }}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <span className="info-icon" aria-hidden>
+        i
+      </span>
+      <span className="tip-box" role="tooltip">
+        <span className="tip-title">How {GOAL_LABEL[goal]} works</span>
+        <span className="tip-min">
+          <strong>Minimize:</strong> {f.minimize}
+        </span>
+        <ol>
+          {f.steps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+      </span>
+    </span>
+  )
+}
+
 // Split button: the main part runs the selected goal (Savings by default); the arrow opens the choices.
 function OptimizeButton({
   busy,
@@ -1495,6 +1549,7 @@ function OptimizeButton({
               >
                 <span className="split-title">
                   {GOAL_LABEL[g]}
+                  <InfoTip goal={g} />
                   {g === 'savings' && <span className="tag">default</span>}
                   {g === goal && (
                     <span className="split-check" aria-label="Selected">
