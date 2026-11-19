@@ -195,16 +195,10 @@ export default function App() {
         <ShopQueue rows={week.shop_queue} previews={previews} costs={week.costs} busy={busy} decide={decide} jobs={data.jobs} />
       </section>
 
-      <div className="two-col">
-        <section>
-          <h2>Sent to vendor</h2>
-          <VendorList rows={week.vendor} previews={previews} costs={week.costs} busy={busy} decide={decide} />
-        </section>
-        <section>
-          <h2>On hold</h2>
-          <HeldList rows={week.held} previews={previews} costs={week.costs} busy={busy} decide={decide} jobs={data.jobs} />
-        </section>
-      </div>
+      <section>
+        <h2>Sent to vendor</h2>
+        <VendorList rows={week.vendor} previews={previews} costs={week.costs} busy={busy} decide={decide} />
+      </section>
 
       <section>
         <h2>Decision log</h2>
@@ -305,11 +299,10 @@ function ShortageGrid({ cells, days }: { cells: ShortageCell[]; days: string[] }
 
 type Decide = (action: string, work_order_id?: string, to_position?: number) => void
 
-const PREVIEW_KEY: Record<string, Assignment> = { send_to_vendor: 'vendor', bring_to_shop: 'shop', hold: 'hold' }
+const PREVIEW_KEY: Record<string, Assignment> = { send_to_vendor: 'vendor', bring_to_shop: 'shop' }
 const ACTION_TEXT: Record<string, string> = {
   send_to_vendor: 'Send %s to the vendor',
   bring_to_shop: 'Repair %s in house',
-  hold: 'Hold %s (not worked this week)',
 }
 const budgetText = (n: number) => (n < 0 ? `over budget by ${money(n)}` : money(n))
 
@@ -356,7 +349,6 @@ function ShopQueue({
             <th className="num">Shop cost</th>
             <th>Reorder</th>
             <th>Vendor</th>
-            <th>Hold</th>
           </tr>
         </thead>
         <tbody>
@@ -414,11 +406,6 @@ function ShopQueue({
                   </button>
                   <span className="price">{money(jobs[r.work_order_id]?.vendor_price ?? 0)}</span>
                 </td>
-                <td>
-                  <button disabled={busy} title={impactText('hold', r.work_order_id, previews, costs)} onClick={() => decide('hold', r.work_order_id)}>
-                    Hold
-                  </button>
-                </td>
               </tr>
             )
           })}
@@ -467,81 +454,13 @@ function VendorList({
               <td className="num">{money(r.vendor_price)}</td>
               <td>{day(r.ready_date)}</td>
               <td>
-                <div className="stack">
-                {r.in_house && (
-                  <span>
-                    <button disabled={busy} title={impactText('bring_to_shop', r.work_order_id, previews, costs)} onClick={() => decide('bring_to_shop', r.work_order_id)}>
-                      Repair in house
-                    </button>
-                  </span>
-                )}
-                <span>
-                  <button disabled={busy} title={impactText('hold', r.work_order_id, previews, costs)} onClick={() => decide('hold', r.work_order_id)}>
-                    Hold
+                {r.in_house ? (
+                  <button disabled={busy} title={impactText('bring_to_shop', r.work_order_id, previews, costs)} onClick={() => decide('bring_to_shop', r.work_order_id)}>
+                    Repair in house
                   </button>
-                </span>
-              </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function HeldList({
-  rows,
-  previews,
-  costs,
-  busy,
-  decide,
-  jobs,
-}: {
-  rows: HoldRow[]
-  previews: WeekResponse['previews']
-  costs: Costs
-  busy: boolean
-  decide: Decide
-  jobs: WeekResponse['jobs']
-}) {
-  if (!rows.length) return <p className="muted">Nothing on hold.</p>
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Order</th>
-            <th>Class</th>
-            <th>Job</th>
-            <th>Change</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.work_order_id}>
-              <td className="mono">{r.work_order_id}</td>
-              <td>{className(r.vehicle_class)}</td>
-              <td>
-                {jobName(r.job_type)}
-                {!r.in_house && <span className="tag">vendor-only</span>}
-              </td>
-              <td>
-                <div className="stack">
-                {r.in_house && (
-                  <span>
-                    <button disabled={busy} title={impactText('bring_to_shop', r.work_order_id, previews, costs)} onClick={() => decide('bring_to_shop', r.work_order_id)}>
-                      Repair in house
-                    </button>
-                  </span>
+                ) : (
+                  <span className="muted">Vendor only</span>
                 )}
-                <span>
-                  <button disabled={busy} title={impactText('send_to_vendor', r.work_order_id, previews, costs)} onClick={() => decide('send_to_vendor', r.work_order_id)}>
-                    Send to vendor
-                  </button>
-                  <span className="price">{money(jobs[r.work_order_id]?.vendor_price ?? 0)}</span>
-                </span>
-              </div>
               </td>
             </tr>
           ))}

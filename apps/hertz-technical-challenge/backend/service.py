@@ -96,9 +96,24 @@ def _sync_with_open_jobs(plan: list[PlanItem], inputs: Inputs) -> tuple[list[Pla
     new_jobs = sorted((j for j in inputs.jobs.values() if j.work_order_id not in planned),
                       key=lambda j: (j.opened_ts, j.work_order_id))
     for j in new_jobs:
-        kept.append(PlanItem(j.work_order_id, SHOP if j.in_house else HOLD))
+        kept.append(PlanItem(j.work_order_id, SHOP if j.in_house else VENDOR))
         events.append(store.Decision("job_added", "system", j.work_order_id))
     return kept, events
+
+
+def _release_held(plan: list[PlanItem], inputs: Inputs) -> tuple[list[PlanItem], list[store.Decision]]:
+    """Hold was removed from the app; return held jobs to the shop or vendor."""
+    events = []
+    out = []
+    for p in plan:
+        if p.assignment == HOLD:
+            to = SHOP if inputs.jobs[p.work_order_id].in_house else VENDOR
+            out.append(PlanItem(p.work_order_id, to))
+            events.append(store.Decision("bring_to_shop" if to == SHOP else "send_to_vendor", "system",
+                                         p.work_order_id, {"from": HOLD, "to": to, "reason": "hold removed"}))
+        else:
+            out.append(p)
+    return out, events
 
 
 def _current_plan(inputs: Inputs, cfg) -> list[PlanItem]:
@@ -113,13 +128,15 @@ def _current_plan(inputs: Inputs, cfg) -> list[PlanItem]:
                                                       week_cost_after=cost)])
         return plan
     plan, events = _sync_with_open_jobs(_to_items(saved), inputs)
+    plan, released = _release_held(plan, inputs)
+    events += released
     if events:
         db.save(week, _to_rows(plan), events)
     return plan
 
 
 # -------------------------------------------------------------- decisions ----
-ACTIONS = {"move", "send_to_vendor", "bring_to_shop", "hold", "reset_to_oldest_first"}
+ACTIONS = {"move", "send_to_vendor", "bring_to_shop", "reset_to_oldest_first"}
 
 
 def _apply(plan: list[PlanItem], inputs: Inputs, action: str,
@@ -150,7 +167,7 @@ def _apply(plan: list[PlanItem], inputs: Inputs, action: str,
         plan.insert(anchor, item)
         return plan, {"from": frm, "to": to}
 
-    target = {"send_to_vendor": VENDOR, "bring_to_shop": SHOP, "hold": HOLD}[action]
+    target = {"send_to_vendor": VENDOR, "bring_to_shop": SHOP}[action]
     if item.assignment == target:
         raise ValueError(f"{work_order_id} is already assigned to {target}")
     if target == SHOP and not inputs.jobs[work_order_id].in_house:
@@ -181,7 +198,7 @@ def _previews(plan: list[PlanItem], inputs: Inputs, cfg, current_total: float) -
     """For each job, what each alternative assignment would do to the week."""
     out = {}
     for i, p in enumerate(plan):
-        options = [a for a in (SHOP, VENDOR, HOLD)
+        options = [a for a in (SHOP, VENDOR)
                    if a != p.assignment and (a != SHOP or inputs.jobs[p.work_order_id].in_house)]
         out[p.work_order_id] = {}
         for a in options:
