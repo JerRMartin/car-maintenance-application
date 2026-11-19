@@ -15,6 +15,7 @@ import logging
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -23,29 +24,84 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Simple FastAPI + React App")
+app = FastAPI(title="Fleet Maintenance Planner")
+
 
 # --- API Routes ---
-@app.get("/api/hello")
-async def hello():
-    logger.info("Accessed /api/hello")
-    return {"message": "Hello from FastAPI!"}
+# Plain `def` (not async): warehouse and Postgres calls block, so FastAPI runs
+# these in worker threads instead of stalling the event loop.
+
+class DecisionIn(BaseModel):
+    action: str
+    work_order_id: str | None = None
+    to_position: int | None = None
+
+
+def _user(request: Request) -> str:
+    # Databricks Apps passes the signed-in user's email in this header.
+    return request.headers.get("X-Forwarded-Email") or "local-dev"
+
 
 @app.get("/api/health")
-async def health_check():
-    logger.info("Health check at /api/health")
+def health_check():
     return {"status": "healthy"}
 
-@app.get("/api/data")
-async def get_data():
-    logger.info("Data requested at /api/data")
-    data = [{"x": x, "y": 2 ** x} for x in range(30)]
-    return {
-        "data": data,
-        "title": "Hello world!",
-        "x_title": "Apps",
-        "y_title": "Fun with data"
-    }
+
+@app.get("/api/week")
+def get_week():
+    """The saved plan's week: shop queue, vendor, shortages, costs, previews, log."""
+    from backend import service
+    try:
+        return service.get_week()
+    except Exception as exc:
+        logger.exception("Failed to build the week")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/api/decisions")
+def post_decision(body: DecisionIn, request: Request):
+    """Save one manager decision, then return the updated week."""
+    from backend import service
+    try:
+        return service.decide(body.action, _user(request), body.work_order_id, body.to_position)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Failed to save decision %s", body)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/config")
+def get_config():
+    """Planning assumptions, so the UI can show what the numbers are based on."""
+    from backend.config import load_config
+
+    return load_config().model_dump(mode="json")
+
+
+@app.get("/api/db-health")
+def db_health():
+    """Checks both data connections: the SQL warehouse and Lakebase."""
+    from backend.db import CATALOG, query
+    result = {"catalog": CATALOG}
+    try:
+        result["warehouse"] = [list(r.values())[0] for r in query(f"SHOW SCHEMAS IN {CATALOG}")]
+    except Exception as exc:
+        logger.exception("Warehouse health check failed")
+        result["warehouse_error"] = str(exc)
+    if os.environ.get("PGHOST"):
+        try:
+            from backend import store
+            from backend.config import load_config
+            result["lakebase_plan_rows"] = len(store.load_plan(load_config().planning_week.start))
+        except Exception as exc:
+            logger.exception("Lakebase health check failed")
+            result["lakebase_error"] = str(exc)
+    else:
+        result["lakebase_error"] = "PGHOST not set: no Lakebase resource attached (using in-memory store)"
+    result["pg_env"] = {k: os.environ.get(k) for k in ("PGHOST", "PGDATABASE", "PGUSER", "PGPORT")}
+    return result
+
 
 # --- Static Files Setup ---
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")

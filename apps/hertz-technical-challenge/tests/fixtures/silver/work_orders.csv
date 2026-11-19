@@ -1,0 +1,59 @@
+work_order_id,vehicle_id,vehicle_class,job_type,opened_ts,status
+WO-029,V-67249,suv,brakes,2026-10-10T22:00:00.000Z,open
+WO-022,V-25061,full-size,tires,2026-10-09T12:00:00.000Z,open
+WO-062,V-32363,midsize,collision repair,2026-10-08T22:00:00.000Z,closed
+WO-047,V-50191,full-size,ac repair,2026-10-11T13:00:00.000Z,open
+WO-050,V-28626,midsize,ac repair,2026-10-11T08:00:00.000Z,open
+WO-028,V-22738,minivan,tires,2026-10-11T05:00:00.000Z,open
+WO-057,V-47131,full-size,collision repair,2026-10-08T22:00:00.000Z,open
+WO-054,V-27482,premium suv,ac repair,2026-10-09T20:00:00.000Z,open
+WO-037,V-18833,suv,brakes,2026-10-10T16:00:00.000Z,open
+WO-025,V-97072,full-size,tires,2026-10-08T17:00:00.000Z,open
+WO-027,V-68809,midsize,tires,2026-10-09T17:00:00.000Z,open
+WO-030,V-31112,full-size,brakes,2026-10-08T08:00:00.000Z,open
+WO-014,V-35349,minivan,oil change,2026-10-08T07:00:00.000Z,open
+WO-006,V-87971,premium suv,oil change,2026-10-11T13:00:00.000Z,open
+WO-004,V-95970,midsize,oil change,2026-10-09T00:00:00.000Z,open
+WO-046,V-40714,economy,ac repair,2026-10-10T01:00:00.000Z,open
+WO-033,V-22933,midsize,brakes,2026-10-11T19:00:00.000Z,open
+WO-024,V-36077,premium suv,tires,2026-10-09T19:00:00.000Z,open
+WO-001,V-15654,economy,oil change,2026-10-09T19:00:00.000Z,open
+WO-039,V-83974,full-size,battery,2026-10-08T16:00:00.000Z,open
+WO-045,V-94676,suv,ac repair,2026-10-10T17:00:00.000Z,open
+WO-019,V-40249,economy,tires,2026-10-11T12:00:00.000Z,open
+WO-059,V-70182,full-size,brakes,2026-10-10T06:00:00.000Z,closed
+WO-009,V-19411,full-size,oil change,2026-10-09T13:00:00.000Z,open
+WO-060,V-15350,economy,oil change,2026-10-11T16:00:00.000Z,closed
+WO-013,V-43467,premium suv,oil change,2026-10-11T18:00:00.000Z,open
+WO-061,V-61235,suv,oil change,2026-10-10T10:00:00.000Z,closed
+WO-010,V-26584,suv,oil change,2026-10-10T10:00:00.000Z,open
+WO-005,V-26746,midsize,oil change,2026-10-10T07:00:00.000Z,open
+WO-020,V-13116,midsize,tires,2026-10-11T05:00:00.000Z,open
+WO-017,V-35023,suv,tires,2026-10-11T02:00:00.000Z,open
+WO-055,V-71063,full-size,transmission,2026-10-10T08:00:00.000Z,open
+WO-053,V-68885,suv,ac repair,2026-10-11T14:00:00.000Z,open
+WO-052,V-44936,full-size,ac repair,2026-10-08T02:00:00.000Z,open
+WO-026,V-78818,suv,tires,2026-10-10T18:00:00.000Z,open
+WO-056,V-72779,economy,transmission,2026-10-09T13:00:00.000Z,open
+WO-011,V-63819,midsize,oil change,2026-10-09T20:00:00.000Z,open
+WO-038,V-55599,economy,battery,2026-10-08T21:00:00.000Z,open
+WO-032,V-62357,suv,brakes,2026-10-09T14:00:00.000Z,open
+WO-002,V-18994,suv,oil change,2026-10-09T00:00:00.000Z,open
+WO-044,V-26228,premium suv,battery,2026-10-08T00:00:00.000Z,open
+WO-051,V-75564,full-size,ac repair,2026-10-10T03:00:00.000Z,open
+WO-041,V-77165,midsize,battery,2026-10-10T00:00:00.000Z,open
+WO-021,V-14095,economy,tires,2026-10-08T00:00:00.000Z,open
+WO-007,V-18199,suv,oil change,2026-10-08T22:00:00.000Z,open
+WO-018,V-76861,economy,tires,2026-10-08T18:00:00.000Z,open
+WO-036,V-22128,suv,brakes,2026-10-11T13:00:00.000Z,open
+WO-003,V-82915,midsize,oil change,2026-10-10T19:00:00.000Z,open
+WO-016,V-64023,midsize,oil change,2026-10-08T05:00:00.000Z,open
+WO-023,V-36067,economy,tires,2026-10-11T16:00:00.000Z,open
+WO-040,V-11880,suv,battery,2026-10-10T01:00:00.000Z,open
+WO-035,V-62523,suv,brakes,2026-10-11T21:00:00.000Z,open
+WO-034,V-71345,economy,brakes,2026-10-09T16:00:00.000Z,open
+WO-043,V-26552,economy,battery,2026-10-09T03:00:00.000Z,open
+WO-048,V-43056,midsize,ac repair,2026-10-08T15:00:00.000Z,open
+WO-049,V-26214,economy,ac repair,2026-10-10T13:00:00.000Z,open
+WO-012,V-75759,suv,oil change,2026-10-09T12:00:00.000Z,open
+WO-042,V-54218,suv,battery,2026-10-09T15:00:00.000Z,open

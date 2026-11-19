@@ -1,0 +1,24 @@
+# Maintenance planning assumptions
+# ---------------------------------
+# Managers: change the numbers below and redeploy the app. No code changes needed.
+# Lines starting with # are notes and are ignored.
+#
+# Job costs, vendor prices, vendor turnaround and daily rental rates are NOT here.
+# They come from the data tables (job_types, vehicle_classes).
+
+planning_week:
+  start: 2026-10-12            # Monday. Lost revenue is counted for this week only.
+  end: 2026-10-18              # Sunday.
+
+shop:
+  tech_hours_per_day: 12       # Total technician hours available per open day
+  open_days: [Mon, Tue, Wed, Thu, Fri]   # Closed on any day not listed
+  labor_rate_per_hour: 68      # Shop cost = shop hours x this rate + parts
+  ready_delay_days: 1          # Car finished today is ready to rent this many days later (1 = next morning)
+
+vendor:
+  weekly_budget: 14000         # Max total vendor spend for the week
+  dispatch_days: [Mon, Tue, Wed, Thu, Fri]   # Days cars can be sent to the vendor
+  # Vendor cars are ready to rent vendor_days after they are sent
+  # (vendor_days comes from job_types). Sent Monday with 1 day = ready Tuesday morning.
+  turnaround_counts_weekends: true   # true = vendor_days are calendar days; false = business days only

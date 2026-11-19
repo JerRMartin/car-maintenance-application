@@ -1,0 +1,8 @@
+job_type,shop_hours,parts_cost,in_house,vendor_price,vendor_days
+oil change,0.75,45.0,true,195.0,1
+collision repair,,,false,2260.0,5
+tires,1.5,380.0,true,580.0,1
+brakes,2.5,260.0,true,540.0,1
+transmission,,,false,3260.0,7
+ac repair,3.0,420.0,true,840.0,2
+battery,1.5,210.0,true,400.0,1

@@ -1,7 +1,7 @@
 {
-  "name": "nodejs-fastapi-hello-world-app",
+  "name": "fleet-maintenance-planner",
   "version": "1.0.0",
-  "description": "A simple Node.js + FastAPI hello world app for Databricks Apps",
+  "description": "Fleet maintenance planner (Databricks App)",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,9 +11,7 @@
   },
   "dependencies": {
     "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "chart.js": "4.5.1",
-    "react-chartjs-2": "5.3.1"
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
     "@types/react": "18.3.31",
@@ -22,4 +20,4 @@
     "typescript": "5.9.3",
     "vite": "5.4.21"
   }
-} 
+}

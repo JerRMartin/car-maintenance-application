@@ -1,1 +1,9 @@
 command: ["uvicorn", "backend.main:app"]
+env:
+  # Injected from the SQL warehouse resource attached in the app's settings
+  # (resource key must be "sql-warehouse").
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+  # Catalog that holds the bronze / silver / gold schemas.
+  - name: HERTZ_CATALOG
+    value: hertz
