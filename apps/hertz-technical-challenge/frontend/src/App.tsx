@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import './App.css'
 
 // ---------------------------------------------------------------- types ----
@@ -112,6 +112,7 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const page = usePage()
+  const [confirmReset, setConfirmReset] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -181,7 +182,7 @@ export default function App() {
             <button className="btn-primary" disabled title="Coming next: we're agreeing the ranking rule first">
               Use suggested order
             </button>
-            <button className="btn-outline" disabled={busy} onClick={() => decide('reset_to_oldest_first')}>
+            <button className="btn-outline" disabled={busy} onClick={() => setConfirmReset(true)}>
               Reset to oldest first
             </button>
           </div>
@@ -261,10 +262,74 @@ export default function App() {
           </section>
         )}
       </main>
+      {confirmReset && (
+        <ConfirmDialog
+          title="Reset to oldest first?"
+          confirmLabel="Reset plan"
+          onCancel={() => setConfirmReset(false)}
+          onConfirm={() => {
+            setConfirmReset(false)
+            decide('reset_to_oldest_first')
+          }}
+        >
+          <p>
+            This replaces the current plan with the shop's default order: every in-house job oldest first, and vendor-only
+            jobs sent to the vendor.
+          </p>
+          <p>
+            Week cost: <strong>{money(week.costs.total)}</strong> → <strong>{money(data.baseline_total)}</strong>
+            {Math.round(data.baseline_total - week.costs.total) !== 0 && (
+              <span className={data.baseline_total > week.costs.total ? 'bad' : 'good'}>
+                {' '}
+                ({signed(data.baseline_total - week.costs.total)})
+              </span>
+            )}
+          </p>
+          <p className="muted">Your earlier decisions stay in the decision log.</p>
+        </ConfirmDialog>
+      )}
     </div>
   )
 }
 
+// Branded "are you sure?" dialog. Cancel has focus; Esc or clicking outside cancels.
+function ConfirmDialog({
+  title,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+  children,
+}: {
+  title: string
+  confirmLabel: string
+  onConfirm: () => void
+  onCancel: () => void
+  children: ReactNode
+}) {
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    cancelRef.current?.focus()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCancel()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
+      <div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="modal-title">
+        <h2 id="modal-title">{title}</h2>
+        <div className="modal-body">{children}</div>
+        <div className="modal-actions">
+          <button ref={cancelRef} className="btn-outline" onClick={onCancel}>
+            Cancel
+          </button>
+          <button className="btn-danger" onClick={onConfirm}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ------------------------------------------------------- summary parts ----
 // "Today" is today's date if it's a shop day in the plan week, otherwise the plan's first shop day.
