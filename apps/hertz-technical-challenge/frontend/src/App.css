@@ -293,12 +293,18 @@ button:disabled {
   background: var(--bad-bg);
   color: var(--bad);
 }
+/* Over budget: the whole card turns red */
 .card.over {
-  border-color: var(--bad);
+  background: #c0362f;
+  border-color: #c0362f;
 }
+.card.over .label,
 .card.over .value,
 .card.over .note {
-  color: var(--bad);
+  color: #fff;
+}
+.card.over .bar {
+  background: rgba(255, 255, 255, 0.3);
 }
 .bar {
   height: 8px;
@@ -310,8 +316,18 @@ button:disabled {
   height: 100%;
   background: var(--yellow);
 }
-.card.over .bar > div {
-  background: var(--bad);
+/* Budget bar: color shows how much of the budget is used */
+.bar.budget-low > div {
+  background: #1e9e55;
+}
+.bar.budget-mid > div {
+  background: var(--yellow);
+}
+.bar.budget-high > div {
+  background: #f08a24;
+}
+.bar.budget-over > div {
+  background: #fff;
 }
 
 /* --------------------------------------------------------------- tables */

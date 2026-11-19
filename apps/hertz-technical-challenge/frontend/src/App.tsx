@@ -628,6 +628,8 @@ function CostCards({ costs, baseline }: { costs: Costs; baseline: number }) {
   const saved = baseline - costs.total
   const overBudget = costs.budget_left < 0
   const used = Math.min(100, (costs.vendor / costs.vendor_budget) * 100)
+  // Budget bar color: green < 60% used, yellow < 85%, orange up to 100%, red when over
+  const budgetLevel = overBudget ? 'over' : used < 60 ? 'low' : used < 85 ? 'mid' : 'high'
   return (
     <div className="cards">
       <div className="card total">
@@ -653,7 +655,7 @@ function CostCards({ costs, baseline }: { costs: Costs; baseline: number }) {
       <div className={overBudget ? 'card over' : 'card'}>
         <span className="label">Vendor</span>
         <span className="value">{money(costs.vendor)}</span>
-        <div className="bar" aria-hidden>
+        <div className={`bar budget-${budgetLevel}`} aria-hidden>
           <div style={{ width: `${used}%` }} />
         </div>
         <span className="note">
